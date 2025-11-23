@@ -1,0 +1,2245 @@
+// This is your Prisma schema file
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CREATOR
+  CONSUMER
+}
+
+enum UserStatus {
+  PENDING       // Email not verified
+  ACTIVE        // Email verified, account active
+  SUSPENDED     // Account suspended
+  DELETED       // Soft deleted
+}
+
+enum DataSourceType {
+  INSTAGRAM
+  TWITTER
+  FACEBOOK
+  LINKEDIN
+  GMAIL
+  OUTLOOK
+}
+
+enum DataSourceStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+  SYNCING
+}
+
+model User {
+  id            String      @id @default(uuid())
+  email         String      @unique
+  password      String      // Hashed password
+  role          UserRole
+  status        UserStatus  @default(PENDING)
+  
+  // Profile Information
+  firstName     String?
+  lastName      String?
+  displayName   String?
+  bio           String?
+  avatarUrl     String?
+  
+  // Email Verification
+  emailVerified      Boolean   @default(false)
+  emailVerificationToken String?
+  emailVerificationExpires DateTime?
+  
+  // Password Reset
+  passwordResetToken  String?
+  passwordResetExpires DateTime?
+  
+  // Timestamps
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  lastLoginAt   DateTime?
+  
+  // Relationships
+  refreshTokens RefreshToken[]
+  biography     Biography?
+  subscriptions Subscription[] @relation("SubscriberSubscriptions")
+  subscribers   Subscription[] @relation("CreatorSubscriptions")
+  dataSources   DataSource[]
+  subscriptionTiers SubscriptionTier[]
+  creatorEarnings   CreatorEarnings?
+  
+  // Memory Graph relationships
+  connectionsA     UserConnection[] @relation("ConnectionsA")
+  connectionsB     UserConnection[] @relation("ConnectionsB")
+  connectionCount  Int @default(0)
+  collisionDetectionEnabled Boolean @default(true)  // Privacy: opt-out
+  
+  // Tagging system relationships
+  tagsCreated      EventTag[] @relation("TagsCreated")
+  tagsReceived     EventTag[] @relation("TagsReceived")
+  verifiedTagCount Int @default(0)
+  memoryCompleteness Float @default(0)  // 0-100 score
+  
+  // Referral program relationships
+  referralCode       ReferralCode?
+  referralsGiven     Referral[] @relation("ReferralsGiven")
+  referralsReceived  Referral[] @relation("ReferralsReceived")
+  referralRewards    ReferralReward[]
+  referralMilestones ReferralMilestone[]
+  totalReferrals     Int @default(0)
+  successfulReferrals Int @default(0)
+  referralEarnings   Float @default(0)
+  
+  // Phase 3.2: AI Pattern Recognition relationships
+  patterns          Pattern[]
+  lifeCoachQueries  LifeCoachQuery[]
+  predictions       Prediction[]
+  patternPrivacy    PatternPrivacy?
+  
+  // Phase 3.3: Shadow Self Analysis relationships
+  deletedContent       DeletedContent[]
+  shadowSelfReports    ShadowSelfReport[]
+  platinumSubscription PlatinumSubscription?
+  ndaSignatures        NDASignature[]
+  accessLogs           AccessLog[]
+  securityViolations   SecurityViolation[]
+  
+  // Phase 3.4: Rewind Feature relationships
+  randomMemories       RandomMemory[]
+  onThisDayMemories    OnThisDayMemory[]
+  rewindPreferences    RewindPreferences?
+  
+  // Phase 3.5: Story Mergers relationships
+  mergedChaptersAsA     MergedChapter[] @relation("MergedChaptersAsCreatorA")
+  mergedChaptersAsB     MergedChapter[] @relation("MergedChaptersAsCreatorB")
+  sentCollaborations    CollaborationInvite[] @relation("SentCollaborations")
+  receivedCollaborations CollaborationInvite[] @relation("ReceivedCollaborations")
+  mergerSuggestions     MergerSuggestion[]
+  suggestedMergers      MergerSuggestion[] @relation("SuggestedMergers")
+  
+  // Phase 4.1: Content Protection relationships
+  contentWatermarks    ContentWatermark[]
+  screenshotViolations ScreenshotViolation[]
+  vaultContent         VaultContent[]
+  dmcaRequestsSent     DMCATakedown[] @relation("TakedownRequests")
+  dmcaNoticesReceived  DMCATakedown[] @relation("TakedownNotices")
+  dmcaCounterNotices   DMCACounterNotice[]
+  
+  // Phase 4.2: Blockchain Authentication relationships
+  blockchainVerifications BlockchainVerification[]
+  trustBadges            TrustBadge[]
+  deepfakeAnalyses       DeepfakeAnalysis[]
+  
+  // Phase 4.3: Enterprise relationships
+  organizationMemberships OrganizationMembership[]
+  
+  // Phase 4.4: Celebrity Management relationships
+  celebrityProfile CelebrityProfile?
+  legacyExecutorFor LegacyPlan[] @relation("LegacyExecutor")
+  
+  // Phase 5: Advanced Features relationships
+  lifeEventPredictions LifeEventPrediction[]
+  audioDiaryEntries AudioDiaryEntry[]
+  interrogationSessions InterrogationSession[]
+  deadMansSwitch DeadMansSwitch?
+  trusteeSwitches DeadMansSwitch[] @relation("DeadMansSwitchTrustee")
+  posthumousContent PosthumousContent[]
+  finalChapter FinalChapter?
+  deathVerifications DeathVerification[]
+  historicalArchives HistoricalArchive[]
+  archiveImportBatches ArchiveImportBatch[]
+  apiKeys APIKey[]
+  developerProfile DeveloperProfile?
+  
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+enum BiographyStatus {
+  DRAFT
+  GENERATING
+  PUBLISHED
+  ARCHIVED
+}
+
+enum EventCategory {
+  LIFE_EVENT
+  TRAVEL
+  CAREER
+  EDUCATION
+  RELATIONSHIP
+  ACHIEVEMENT
+  OTHER
+}
+
+model Biography {
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title           String?
+  description     String?
+  coverImageUrl   String?
+  
+  status          BiographyStatus @default(DRAFT)
+  isPublic        Boolean         @default(false)
+  requiresPayment Boolean         @default(false)
+  
+  // Metrics
+  viewCount       Int             @default(0)
+  subscriberCount Int             @default(0)
+  
+  // Timestamps
+  generatedAt     DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relationships
+  chapters        Chapter[]
+  events          BiographyEvent[]
+  schedules       ChapterSchedule?
+  
+  @@map("biographies")
+}
+
+model Chapter {
+  id              String    @id @default(uuid())
+  biographyId     String
+  biography       Biography @relation(fields: [biographyId], references: [id], onDelete: Cascade)
+  
+  order           Int       // Sorting order
+  title           String
+  content         String    @db.Text
+  summary         String?
+  
+  // Time period
+  timeperiod      String?   // e.g., "Childhood", "2015-2018"
+  startDate       DateTime?
+  endDate         DateTime?
+  
+  coverImageUrl   String?
+  
+  // Metadata
+  wordCount       Int       @default(0)
+  readTime        Int       @default(0) // Estimated minutes
+  
+  // Phase 3.1: Episodic Content
+  scheduledReleaseAt DateTime?  // When chapter should be released
+  isReleased      Boolean   @default(true)  // Whether chapter is publicly visible
+  biographyId     String
+  biography       Biography     @relation(fields: [biographyId], references: [id], onDelete: Cascade)
+  chapterId       String?
+  chapter         Chapter?      @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  
+  date            DateTime
+  title           String
+  description     String?
+  category        EventCategory @default(OTHER)
+  
+  // Source information
+  sourceType      String?       // INSTAGRAM, TWITTER, EMAIL, etc.
+  sourceId        String?       // Original post/email ID
+  metadata        Json?         // Flexible JSON for provider-specific data
+  
+  location        String?
+  latitude        Float?
+  longitude       Float?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([biographyId])
+  @@index([chapterId])
+  @@index([date])
+  @@map("biography_events")
+}
+
+enum SubscriptionTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Subscription {
+  id                    String           @id @default(uuid())
+  subscriberId          String           // User who is subscribing
+  subscriber            User             @relation("SubscriberSubscriptions", fields: [subscriberId], references: [id], onDelete: Cascade)
+  
+  creatorId             String           // User being subscribed to (must be CREATOR role)
+  creator               User             @relation("CreatorSubscriptions", fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  tier                  SubscriptionTier
+  priceAtPurchase       Float            // Historical price tracking
+  status                String           @default("ACTIVE") // ACTIVE, CANCELLED, EXPIRED, PAST_DUE
+  
+  // Stripe integration
+  stripeSubscriptionId  String?          @unique
+  stripeCustomerId      String?
+  
+  // Subscription period
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  cancelAtPeriodEnd     Boolean          @default(false)
+  canceledAt            DateTime?
+  
+  // Payment method (basic info)
+  paymentMethod         String?          // 'card', 'paypal', etc.
+  
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  
+  // Relationships
+  creator         User             @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  tier            SubscriptionTier
+  price           Float
+  isActive        Boolean          @default(true)
+  
+  // Customizable features per tier
+  features        Json             // Array of feature strings
+  
+  // Analytics
+  subscriberCount Int              @default(0)
+  
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  
+  @@unique([creatorId, tier])
+  @@index([creatorId])
+  @@map("subscription_tiers")
+}
+
+model Transaction {
+  id                    String            @id @default(uuid())
+  subscriptionId        String
+  subscription          Subscription      @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  amount                Float             // Total amount
+  platformFee           Float             // 20% platform fee
+  creatorEarnings       Float             // 80% to creator
+  currency              String            @default("USD")
+  
+  // Stripe integration
+  stripePaymentIntentId String?           @unique
+  
+  status                TransactionStatus @default(PENDING)
+  
+  // Metadata
+  description           String?
+  refundReason          String?
+  refundedAt            DateTime?
+  
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+  
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
+}
+
+model CreatorEarnings {
+  id              String    @id @default(uuid())
+  creatorId       String    @unique
+  creator         User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  // Earnings tracking
+  totalEarnings   Float     @default(0)
+  pendingPayout   Float     @default(0)
+  paidOut         Float     @default(0)
+  
+  // Stripe connect for payouts
+  stripeAccountId String?   @unique
+  
+  // Payout info
+  lastPayoutDate  DateTime?
+  lastPayoutAmount Float?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("creator_earnings")
+}
+
+// Data Source models continue below...
+
+// New models for Data Integration
+
+model DataSource {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            DataSourceType
+  status          DataSourceStatus  @default(CONNECTED)
+  
+  // OAuth tokens (encrypted)
+  accessToken     String?
+  refreshToken    String?
+  tokenExpiresAt  DateTime?
+  
+  // Provider-specific data
+  providerUserId  String?           // Instagram user ID, Twitter user ID, etc.
+  providerUsername String?          // Instagram handle, Twitter handle, etc.
+  providerEmail   String?
+  
+  // Metadata
+  lastSyncAt      DateTime?
+  lastSyncError   String?
+  syncCount       Int               @default(0)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relationships
+  syncJobs        SyncJob[]
+  mediaItems      MediaItem[]
+  socialPosts     SocialPost[]
+  emailMetadata   EmailMetadata[]
+  
+  @@unique([userId, type])
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@map("data_sources")
+}
+
+model SyncJob {
+  id              String            @id @default(uuid())
+  dataSourceId    String
+  dataSource      DataSource        @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  
+  status          String            // PENDING, IN_PROGRESS, COMPLETED, FAILED
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  itemsFetched    Int               @default(0)
+  itemsProcessed  Int               @default(0)
+  errorMessage    String?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([dataSourceId])
+  @@index([status])
+  @@map("sync_jobs")
+}
+
+model MediaItem {
+  id              String            @id @default(uuid())
+  dataSourceId    String
+  dataSource      DataSource        @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  
+  // Media identifiers
+  providerMediaId String            // Instagram media ID, etc.
+  mediaType       String            // IMAGE, VIDEO, CAROUSEL
+  
+  // Storage
+  originalUrl     String
+  storedUrl       String?           // S3/Cloud Storage URL
+  thumbnailUrl    String?
+  
+  // Metadata
+  caption         String?
+  timestamp       DateTime?
+  location        String?
+  latitude        Float?
+  longitude       Float?
+  
+  // EXIF data
+  width           Int?
+  height          Int?
+  fileSize        Int?
+  mimeType        String?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@unique([dataSourceId, providerMediaId])
+  @@index([dataSourceId])
+  @@index([timestamp])
+  @@map("media_items")
+}
+
+model SocialPost {
+  id              String            @id @default(uuid())
+  dataSourceId    String
+  dataSource      DataSource        @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  
+  providerPostId  String            // Tweet ID, Instagram post ID, etc.
+  content         String?
+  timestamp       DateTime
+  
+  // Engagement metrics
+  likeCount       Int?
+  commentCount    Int?
+  shareCount      Int?
+  viewCount       Int?
+  
+  // Metadata
+  isReply         Boolean           @default(false)
+  isRetweet       Boolean           @default(false)
+  hashtags        String[]          // Array of hashtags
+  mentions        String[]          // Array of mentioned users
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@unique([dataSourceId, providerPostId])
+  @@index([dataSourceId])
+  @@index([timestamp])
+  @@map("social_posts")
+}
+
+model EmailMetadata {
+  id              String            @id @default(uuid())
+  dataSourceId    String
+  dataSource      DataSource        @relation(fields: [dataSourceId], references: [id], onDelete: Cascade)
+  
+  // Email identifiers (hashed for privacy)
+  emailHash       String            @unique
+  
+  // Metadata only (zero-knowledge)
+  senderEmail     String?
+  recipientEmail  String?
+  subject         String?
+  timestamp       DateTime
+  
+  // Event detection
+  isEventEmail    Boolean           @default(false)
+  eventType       String?           // FLIGHT, HOTEL, BOOKING, CONFIRMATION, etc.
+  eventDate       DateTime?
+  eventLocation   String?
+  
+  // Contact relationship
+  contactName     String?
+  contactFrequency Int              @default(1)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([dataSourceId])
+  @@index([timestamp])
+  @@index([isEventEmail])
+  @@map("email_metadata")
+}
+
+// Phase 3.1: Living Chapters & Episodic Content Models
+
+enum ChapterReleaseStatus {
+  DRAFT
+  SCHEDULED
+  RELEASED
+}
+
+enum UpdateType {
+  MICRO_UPDATE
+  EDIT
+  ADDITION
+  CORRECTION
+}
+
+// Chapter updates for living feed
+model ChapterUpdate {
+  id          String    @id @default(uuid())
+  chapterId   String
+  chapter     Chapter   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  
+  updateType  UpdateType @default(MICRO_UPDATE)
+  summary     String    // Brief description of update
+  content     String?   @db.Text // Optional detailed content
+  
+  // AI-generated diff
+  addedContent    String?   @db.Text
+  removedContent  String?   @db.Text
+  
+  isPublic    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  
+  @@index([chapterId])
+  @@index([createdAt])
+  @@map("chapter_updates")
+}
+
+// Chapter scheduling for episodic releases
+model ChapterSchedule {
+  id              String    @id @default(uuid())
+  biographyId     String    @unique
+  biography       Biography @relation(fields: [biographyId], references: [id], onDelete: Cascade)
+  
+  // Release pattern
+  releasePattern  String    // WEEKLY, BIWEEKLY, MONTHLY, CUSTOM
+  customCron      String?   // Cron expression for custom schedules
+  
+  // Schedule settings
+  dayOfWeek       Int?      // 0-6 for weekly releases (0 = Sunday)
+  timeOfDay       String?   // HH:MM format (e.g., "18:00")
+  timezone        String    @default("UTC")
+  
+  // Status
+  isActive        Boolean   @default(true)
+  nextReleaseAt   DateTime?
+  lastReleaseAt   DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([biographyId])
+  @@index([nextReleaseAt])
+  @@index([isActive])
+  @@map("chapter_schedules")
+}
+
+// Phase 3.2: Advanced AI - Pattern Recognition & Life Coach Mode
+
+enum PatternType {
+  CAREER
+  RELATIONSHIP
+  PRODUCTIVITY
+  HEALTH
+  FINANCIAL
+  SOCIAL
+  CREATIVE
+}
+
+enum PatternFrequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  IRREGULAR
+}
+
+enum PredictionOutcome {
+  ACCURATE
+  INACCURATE
+  PARTIALLY_ACCURATE
+  PENDING
+  EXPIRED
+}
+
+// Detected patterns in user's life
+model Pattern {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type            PatternType
+  title           String          // e.g., "Career transitions every 3 years"
+  description     String          @db.Text
+  insights        String          @db.Text // AI-generated insights
+  recommendations String?         @db.Text
+  
+  // Pattern metadata
+  firstOccurrence DateTime
+  lastOccurrence  DateTime
+  frequency       PatternFrequency
+  occurrenceCount Int             @default(0)
+  
+  // Confidence and validation
+  confidenceScore Float           @default(0) // 0-100
+  isValidated     Boolean         @default(false)
+  userFeedback    String?         // HELPFUL, NOT_HELPFUL, INACCURATE
+  feedbackNotes   String?
+  
+  // Privacy
+  isPrivate       Boolean         @default(true)
+  shareableWith   String[]        // User IDs allowed to see
+  
+  // Premium feature flag
+  isPremiumFeature Boolean        @default(true)
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relationships
+  events          PatternEvent[]
+  predictions     Prediction[]
+  
+  @@index([userId])
+  @@index([type])
+  @@index([confidenceScore])
+  @@index([createdAt])
+  @@map("patterns")
+}
+
+// Events that contribute to a pattern
+model PatternEvent {
+  id              String          @id @default(uuid())
+  patternId       String
+  pattern         Pattern         @relation(fields: [patternId], references: [id], onDelete: Cascade)
+  
+  biographyEventId String?
+  biographyEvent  BiographyEvent? @relation(fields: [biographyEventId], references: [id], onDelete: SetNull)
+  chapterId       String?
+  
+  // Event relevance to pattern
+  relevanceScore  Float           @default(0) // 0-100
+  eventDate       DateTime
+  eventSummary    String?
+  
+  createdAt       DateTime        @default(now())
+  
+  @@index([patternId])
+  @@index([biographyEventId])
+  @@index([eventDate])
+  @@map("pattern_events")
+}
+
+// Life coach AI queries and responses
+model LifeCoachQuery {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  conversationId  String    // Group related queries
+  
+  // Query and response
+  query           String    @db.Text
+  response        String    @db.Text
+  
+  // Context used for response
+  patternsUsed    String[]  // Pattern IDs considered
+  eventsReferenced String[] // Event IDs mentioned
+  
+  // Quality metrics
+  responseTime    Int?      // Milliseconds
+  userRating      Int?      // 1-5 stars
+  userFeedback    String?
+  wasHelpful      Boolean?
+  
+  // AI metadata
+  model           String    @default("gpt-4")
+  tokensUsed      Int?
+  promptTokens    Int?
+  completionTokens Int?
+  
+  // Premium feature
+  isPremiumQuery  Boolean   @default(true)
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("life_coach_queries")
+}
+
+// AI-generated predictions
+model Prediction {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  patternId       String?
+  pattern         Pattern?          @relation(fields: [patternId], references: [id], onDelete: SetNull)
+  
+  // Prediction details
+  category        PatternType
+  prediction      String            @db.Text
+  reasoning       String            @db.Text
+  disclaimer      String            @db.Text // Legal disclaimer
+  
+  // Timeframe
+  predictedDate   DateTime?
+  dateRange       String?           // "Q2 2026", "Within 6 months"
+  timeframeStart  DateTime?
+  timeframeEnd    DateTime?
+  
+  // Confidence
+  confidenceScore Float             @default(0) // 0-100
+  confidenceLow   Float?
+  confidenceHigh  Float?
+  
+  // Validation
+  outcome         PredictionOutcome @default(PENDING)
+  actualDate      DateTime?
+  userFeedback    String?
+  accuracyScore   Float?            // How accurate was it (0-100)
+  
+  // Premium feature
+  isPremiumFeature Boolean          @default(true)
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  expiresAt       DateTime?
+  
+  @@index([userId])
+  @@index([category])
+  @@index([predictedDate])
+  @@index([outcome])
+  @@map("predictions")
+}
+
+// Privacy settings for pattern detection
+model PatternPrivacy {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Opt-in controls (default to false per user requirement)
+  enablePatternDetection     Boolean @default(false)
+  enableCareerPatterns       Boolean @default(false)
+  enableRelationshipPatterns Boolean @default(false)
+  enableProductivityPatterns Boolean @default(false)
+  enableHealthPatterns       Boolean @default(false)
+  enableFinancialPatterns    Boolean @default(false)
+  enableSocialPatterns       Boolean @default(false)
+  enableCreativePatterns     Boolean @default(false)
+  
+  // Sharing settings
+  allowPatternSharing        Boolean @default(false)
+  shareWithFollowers         Boolean @default(false)
+  shareWithConnections       Boolean @default(false)
+  
+  // Life coach settings
+  enableLifeCoach            Boolean @default(false)
+  allowDataForCoaching       Boolean @default(false)
+  
+  // Predictions
+  enablePredictions          Boolean @default(false)
+  showPredictionsToOthers    Boolean @default(false)
+  acceptedPredictionDisclaimer Boolean @default(false)
+  disclaimerAcceptedAt       DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("pattern_privacy")
+}
+
+// Phase 3.3: Shadow Self Analysis (Platinum Tier $99/month)
+
+enum DeletionReason {
+  USER_DELETED
+  PRIVACY_CONCERN
+  REGRET
+  PROFESSIONAL_RISK
+  RELATIONSHIP_PROTECTION
+  LEGAL_REQUIREMENT
+  OTHER
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  SUSPENDED
+  PAST_DUE
+  EXPIRED
+}
+
+// Track all deleted content for Shadow Self analysis
+model DeletedContent {
+  id              String         @id @default(uuid())
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // What was deleted
+  contentType     String         // POST, EVENT, CHAPTER, BIOGRAPHY_EVENT, SOCIAL_POST
+  contentId       String         // Original content ID before deletion
+  originalData    Json           // Full content snapshot at time of deletion
+  contentSummary  String?        // Brief summary for quick scanning
+  
+  // Deletion metadata
+  deletedAt       DateTime       @default(now())
+  deletionReason  DeletionReason?
+  userNotes       String?        @db.Text
+  
+  // Category detection (AI-powered)
+  detectedTheme   String?        // career, relationship, health, etc.
+  emotionalTone   String?        // regret, shame, fear, protection
+  
+  // Recovery info
+  canRecover      Boolean        @default(true)
+  recoveredAt     DateTime?
+  permanentlyDeletedAt DateTime?  // GDPR: Auto-delete after 90 days
+  
+  // Privacy settings
+  showInShadowSelf Boolean       @default(true)
+  excludeFromAnalysis Boolean    @default(false)
+  
+  createdAt       DateTime       @default(now())
+  
+  @@index([userId])
+  @@index([deletedAt])
+  @@index([contentType])
+  @@index([permanentlyDeletedAt])
+  @@map("deleted_content")
+}
+
+// Generated Shadow Self reports
+model ShadowSelfReport {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Report metadata
+  generatedAt     DateTime  @default(now())
+  reportPeriod    String    // "All Time", "Last Year", "Last 5 Years"
+  reportVersion   String    @default("1.0")
+  
+  // Analysis results
+  deletedItemCount Int
+  hiddenItemCount  Int
+  editedItemCount  Int
+  censoredThemes   String[]  // ["career challenges", "relationships", "health"]
+  emotionalPatterns String[] // ["shame", "regret", "protection"]
+  publicPrivateGap Float     // 0-100 score (higher = more hidden)
+  
+  // AI-generated insights
+  psychologicalInsights String @db.Text
+  integrationSuggestions String? @db.Text
+  healingOpportunities String? @db.Text
+  
+  // Report content
+  reportData      Json      // Full structured report
+  pdfUrl          String?   // Generated PDF with watermark
+  pdfWatermarkId  String?   // Links to ForensicWatermark
+  
+  // Security
+  watermarkId     String    @unique
+  accessCount     Int       @default(0)
+  lastAccessedAt  DateTime?
+  downloadCount   Int       @default(0)
+  
+  // Auto-expire for security
+  expiresAt       DateTime  // Auto-delete after 30 days
+  isExpired       Boolean   @default(false)
+  
+  // Relationships
+  accessLogs      AccessLog[]
+  watermarks      ForensicWatermark[]
+  
+  @@index([userId])
+  @@index([generatedAt])
+  @@index([expiresAt])
+  @@map("shadow_self_reports")
+}
+
+// Platinum subscription tier
+model PlatinumSubscription {
+  id              String             @id @default(uuid())
+  userId          String             @unique
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Subscription status
+  status          SubscriptionStatus @default(ACTIVE)
+  startedAt       DateTime           @default(now())
+  currentPeriodStart DateTime        @default(now())
+  currentPeriodEnd   DateTime
+  nextBillingDate DateTime
+  cancelledAt     DateTime?
+  cancellationReason String?
+  
+  // Pricing
+  monthlyRate     Float              @default(99.00)
+  currency        String             @default("USD")
+  
+  // Payment provider
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  lastPaymentDate  DateTime?
+  lastPaymentAmount Float?
+  
+  // Security requirements
+  ndaSignedAt     DateTime?
+  ndaVersion      String?
+  ndaIsValid      Boolean            @default(false)
+  
+  biometricEnabled Boolean           @default(false)
+  biometricType   String?            // FACE_ID, TOUCH_ID, FINGERPRINT, WINDOWS_HELLO
+  biometricSetupAt DateTime?
+  
+  // Usage tracking
+  reportsGenerated Int               @default(0)
+  lastReportAt    DateTime?
+  reportsThisMonth Int               @default(0)
+  maxReportsPerMonth Int             @default(10)
+  
+  // Security violations
+  violationCount  Int                @default(0)
+  lastViolation   DateTime?
+  isSuspended     Boolean            @default(false)
+  suspendedUntil  DateTime?
+  
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  
+  // Relationships
+  ndaSignatures   NDASignature[]
+  
+  @@index([userId])
+  @@index([status])
+  @@map("platinum_subscriptions")
+}
+
+// NDA signatures for legal protection
+model NDASignature {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  platinumSubscriptionId String?
+  platinumSubscription   PlatinumSubscription? @relation(fields: [platinumSubscriptionId], references: [id])
+  
+  // NDA details
+  ndaVersion      String    // "v1.0", "v1.1", etc.
+  ndaText         String    @db.Text
+  ndaChecksum     String    // Hash of NDA text for integrity
+  
+  // Signature metadata
+  signedAt        DateTime  @default(now())
+  ipAddress       String
+  deviceInfo      String
+  geoLocation     String?
+  userAgent       String
+  
+  // Biometric signature (if available)
+  biometricType   String?   // FACE_ID, TOUCH_ID, FINGERPRINT
+  biometricHash   String?   @db.Text // Encrypted biometric verification hash
+  biometricVerified Boolean @default(false)
+  
+  // Legal validity
+  isValid         Boolean   @default(true)
+  revokedAt       DateTime?
+  revokeReason    String?
+  witnessedBy     String?   // Optional witness/notary
+  
+  // Acceptance confirmation
+  scrolledToBottom Boolean  @default(false)
+  timeSpentReading Int?     // Seconds spent reading NDA
+  acceptanceMethod String   // BIOMETRIC, PIN_BACKUP, PASSWORD
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([signedAt])
+  @@index([isValid])
+  @@map("nda_signatures")
+}
+
+// Comprehensive access logging for security
+model AccessLog {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  reportId        String?
+  report          ShadowSelfReport? @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  
+  // Access details
+  accessedAt      DateTime  @default(now())
+  action          String    // VIEW, DOWNLOAD, GENERATE, SCREENSHOT_ATTEMPT, PRINT_ATTEMPT
+  actionResult    String    @default("SUCCESS") // SUCCESS, BLOCKED, FAILED
+  
+  // Device fingerprint
+  deviceId        String
+  deviceType      String    // iOS, Android, Web, Windows, macOS
+  deviceModel     String?
+  osVersion       String?
+  appVersion      String?
+  
+  // Network info
+  ipAddress       String
+  geoLocation     String?
+  city            String?
+  country         String?
+  userAgent       String
+  
+  // Security events
+  screenshotAttempted Boolean @default(false)
+  biometricUsed   Boolean   @default(false)
+  biometricSuccess Boolean  @default(false)
+  sessionDuration Int?      // Seconds
+  
+  // Anomaly detection
+  isAnomaly       Boolean   @default(false)
+  anomalyReason   String?   // "unusual_location", "new_device", "suspicious_timing"
+  riskScore       Float     @default(0) // 0-100
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([reportId])
+  @@index([accessedAt])
+  @@index([action])
+  @@map("access_logs")
+}
+
+// Forensic watermarking for leak detection
+model ForensicWatermark {
+  id              String    @id @default(uuid())
+  
+  reportId        String?
+  report          ShadowSelfReport? @relation(fields: [reportId], references: [id])
+  
+  // Watermark identifier
+  watermarkCode   String    @unique  // Unique code per view: "WM-7F3K-9P2L-4R8N"
+  shortCode       String    // Visible code in report
+  
+  // Embedded metadata
+  userId          String
+  sessionId       String
+  generatedAt     DateTime  @default(now())
+  
+  // Device info
+  deviceId        String
+  ipAddress       String
+  geoLocation     String?
+  
+  // Watermark techniques
+  wmType          String    // TEXT_INVISIBLE, STEGANOGRAPHY, VISIBLE, PDF_METADATA
+  wmData          String    @db.Text // Encoded watermark data
+  wmPosition      String?   // Where watermark is placed
+  
+  // View tracking
+  viewCount       Int       @default(0)
+  lastViewedAt    DateTime?
+  
+  // Leak detection
+  detectedInLeak  Boolean   @default(false)
+  leakDetectedAt  DateTime?
+  leakSource      String?   // How leak was discovered
+  leakReportedBy  String?   // User who reported leak
+  sourceDeviceId  String?   // Traced back to originating device
+  
+  // Legal action
+  legalActionTaken Boolean  @default(false)
+  legalActionDate DateTime?
+  legalNotes      String?   @db.Text
+  
+  @@index([watermarkCode])
+  @@index([userId])
+  @@index([reportId])
+  @@index([detectedInLeak])
+  @@map("forensic_watermarks")
+}
+
+// Security violations and incidents
+model SecurityViolation {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  reportId        String?
+  
+  // Violation details
+  violationType   String    // SCREENSHOT, SCREEN_RECORD, UNAUTHORIZED_SHARE, COPY_PASTE
+  violatedAt      DateTime  @default(now())
+  
+  // Device info
+  deviceId        String
+  deviceType      String
+  ipAddress       String
+  
+  // Response taken
+  actionTaken     String    // WARNING, LOCK_REPORT, SUSPEND_ACCOUNT, TERMINATE
+  warningShown    Boolean   @default(false)
+  accountLocked   Boolean   @default(false)
+  lockDuration    Int?      // Hours
+  unlockAt        DateTime?
+  
+  // User response
+  userAcknowledged Boolean  @default(false)
+  acknowledgedAt  DateTime?
+  userExplanation String?   @db.Text
+  
+  // Resolution
+  isResolved      Boolean   @default(false)
+  resolvedAt      DateTime?
+  resolution      String?   // DISMISSED, WARNED, PERMANENT_BAN
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([violatedAt])
+  @@index([violationType])
+  @@map("security_violations")
+}
+
+// Phase 3.4: The Rewind Feature (Instagram Stories-style memory interface)
+
+// Daily random memory tracking
+model RandomMemory {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Memory details
+  date            DateTime  @db.Date
+  
+  // Memory type and source
+  memoryType      String    // PHOTO, EVENT, POST, LOCATION, MOOD, DIARY
+  sourceType      String    // INSTAGRAM, TWITTER, GMAIL, BIOGRAPHY_EVENT, DIARY_ENTRY
+  sourceId        String    // ID of source item
+  
+  // Display info
+  title           String
+  description     String?
+  thumbnailUrl    String?   // Link to source media
+  
+  // Engagement
+  wasViewed       Boolean   @default(false)
+  viewedAt        DateTime?
+  userReaction    String?   // loved, laughed, surprised, nostalgic
+  
+  // Notification
+  notificationSent Boolean  @default(false)
+  sentAt          DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([date])
+  @@index([wasViewed])
+  @@map("random_memories")
+}
+
+// "On This Day" memory tracking
+model OnThisDayMemory {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Anniversary details
+  originalDate    DateTime  @db.Date
+  currentDate     DateTime  @db.Date
+  yearsAgo        Int
+  
+  // Memory content (query on-demand, store minimal metadata)
+  title           String
+  summary         String
+  contentType     String    // DAY_SNAPSHOT, EVENT, POST, PHOTO
+  sourceIds       String[]  // IDs to query full content
+  thumbnailUrls   String[]  // Preview images
+  
+  // Notification
+  notificationSent Boolean  @default(false)
+  notifiedAt      DateTime?
+  
+  // Engagement
+  wasViewed       Boolean   @default(false)
+  viewedAt        DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId, originalDate])
+  @@index([currentDate])
+  @@map("on_this_day_memories")
+}
+
+// User preferences for Rewind feature
+model RewindPreferences {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Feature toggles
+  enableRewind          Boolean @default(true)
+  enableOnThisDay       Boolean @default(true)
+  enableRandomMemory    Boolean @default(true)
+  enableComparison      Boolean @default(true)
+  
+  // Notification preferences
+  onThisDayTime         String  @default("09:00") // HH:MM format
+  randomMemoryTime      String  @default("10:00")
+  
+  // Privacy
+  showLocationInRewind  Boolean @default(true)
+  showPhotosInRewind    Boolean @default(true)
+  showPostsInRewind     Boolean @default(true)
+  showMoodInRewind      Boolean @default(true)
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("rewind_preferences")
+}
+
+// Phase 3.5: Story Mergers (Collaborative dual-perspective chapters)
+
+model MergedChapter {
+  id              String    @id @default(uuid())
+  
+  // Collaborators
+  creatorAId      String
+  creatorA        User      @relation("MergedChaptersAsCreatorA", fields: [creatorAId], references: [id])
+  creatorBId      String
+  creatorB        User      @relation("MergedChaptersAsCreatorB", fields: [creatorBId], references: [id])
+  
+  // Linked content (original chapters from each creator)
+  chapterAId      String?
+  chapterA        Chapter?  @relation("MergedChapterA", fields: [chapterAId], references: [id])
+  chapterBId      String?
+  chapterB        Chapter?  @relation("MergedChapterB", fields: [chapterBId], references: [id])
+  
+  // Shared event reference (from Memory Graph)
+  sharedEventId   String?
+  
+  // Status
+  status          String    // DRAFT, PENDING_APPROVAL, PUBLISHED, ARCHIVED
+  
+  // Content
+  title           String
+  mergedContent   Json      // Dual perspectives synchronized
+  perspectiveAContent String @db.Text
+  perspectiveBContent String @db.Text
+  
+  // Edit locking (prevent simultaneous edits)
+  lockedBy        String?   // userId of who's currently editing
+  lockedAt        DateTime?
+  lockExpires     DateTime? // Auto-unlock after 30 min
+  
+  // Metadata
+  publishedAt     DateTime?
+  viewCount       Int       @default(0)
+  likeCount       Int       @default(0)
+  
+  // Revenue split (adjustable, not just 50/50)
+  totalEarnings      Float     @default(0)
+  revenueSplitRatio  Float     @default(0.5) // 0.5 = 50/50, 0.6 = 60/40, etc.
+  creatorAEarnings   Float     @default(0)
+  creatorBEarnings   Float     @default(0)
+  
+  // Deletion consent (require mutual agreement)
+  creatorAWantsDelete Boolean  @default(false)
+  creatorBWantsDelete Boolean  @default(false)
+  deletionRequestedAt DateTime?
+  
+  // Collaboration
+  invitationId    String?
+  versions        MergerVersion[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([creatorAId])
+  @@index([creatorBId])
+  @@index([status])
+  @@index([lockedBy])
+  @@map("merged_chapters")
+}
+
+model CollaborationInvite {
+  id              String    @id @default(uuid())
+  
+  // Sender and recipient
+  senderId        String
+  sender          User      @relation("SentCollaborations", fields: [senderId], references: [id])
+  recipientId     String
+  recipient       User      @relation("ReceivedCollaborations", fields: [recipientId], references: [id])
+  
+  // Proposal details
+  sharedEventId   String?
+  proposedTitle   String
+  message         String?   @db.Text
+  
+  // Proposed revenue split
+  proposedSplit   Float     @default(0.5) // 0.5 = 50/50
+  
+  // Status
+  status          String    @default("PENDING") // PENDING, ACCEPTED, DECLINED, EXPIRED, CANCELLED
+  respondedAt     DateTime?
+  responseMessage String?   @db.Text
+  
+  // Result
+  mergedChapterId String?
+  
+  // Expiration
+  expiresAt       DateTime  // 7 days default
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("collaboration_invites")
+}
+
+model MergerVersion {
+  id              String    @id @default(uuid())
+  mergedChapterId String
+  mergedChapter   MergedChapter @relation(fields: [mergedChapterId], references: [id], onDelete: Cascade)
+  
+  // Version info
+  versionNumber   Int
+  editedBy        String    // creatorAId or creatorBId
+  
+  // Content snapshot
+  contentSnapshot Json
+  perspectiveASnapshot String @db.Text
+  perspectiveBSnapshot String @db.Text
+  
+  // Changes
+  changeDescription String?
+  changesApproved   Boolean @default(false)
+  approvedBy        String?
+  approvedAt        DateTime?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([mergedChapterId])
+  @@index([versionNumber])
+  @@map("merger_versions")
+}
+
+model MergerSuggestion {
+  id              String    @id @default(uuid())
+  
+  // For which user
+  userId          String
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Suggested collaborator
+  suggestedUserId String
+  suggestedUser   User      @relation("SuggestedMergers", fields: [suggestedUserId], references: [id])
+  
+  // Shared event basis
+  sharedEventId   String
+  matchScore      Float     // 0-1 similarity score
+  
+  // Suggestion metadata
+  reason          String    // "You were both at..."
+  previewTitle    String
+  
+  // Status
+  status          String    @default("ACTIVE") // ACTIVE, DISMISSED, CONVERTED
+  inviteSent      Boolean   @default(false)
+  inviteId        String?
+  
+  id              String    @id @default(uuid())
+  
+  // Content reference
+  contentType     String    // IMAGE, VIDEO, PDF, TEXT
+  contentId       String    // Reference to original content
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Watermark details
+  visibleWatermark   String?  // Semi-transparent overlay text
+  forensicWatermark  String   // Invisible steganography data
+  watermarkHash      String   @unique // For verification
+  
+  // User consent (opt-in for forensic)
+  forensicConsent    Boolean  @default(false)
+  
+  // Tracking
+  generatedAt     DateTime  @default(now())
+  verifiedCount   Int       @default(0)
+  leakReported    Boolean   @default(false)
+  leakReportedAt  DateTime?
+  
+  @@index([userId])
+  @@index([watermarkHash])
+  @@map("content_watermarks")
+}
+
+model ScreenshotViolation {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Device info
+  deviceId        String
+  deviceModel     String?
+  osVersion       String?
+  appVersion      String?
+  
+  // Violation details
+  contentType     String    // What was being viewed
+  contentId       String?
+  violationType   String    // SCREENSHOT, SCREEN_RECORDING, UNKNOWN
+  
+  // Action taken (warning mode)
+  warningIssued   Boolean   @default(true)
+  accountSuspended Boolean  @default(false)
+  suspensionDuration Int?   // Minutes
+  
+  detectedAt      DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([deviceId])
+  @@map("screenshot_violations")
+}
+
+model VaultContent {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Content
+  title           String
+  contentType     String    // TEXT, IMAGE, VIDEO, DOCUMENT
+  encryptedContent String   @db.Text // AES-256 encrypted
+  encryptionKey   String    // User-specific key (encrypted)
+  
+  // Access control
+  requiresBiometric Boolean @default(true)
+  requiresPIN       Boolean @default(true)
+  accessTimeLimit   Int     @default(300) // Seconds - varies by content type
+  
+  // Audit trail
+  accessLogs      VaultAccessLog[]
+  viewCount       Int       @default(0)
+  lastAccessedAt  DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@map("vault_content")
+}
+
+model VaultAccessLog {
+  id              String    @id @default(uuid())
+  
+  vaultContentId  String
+  vaultContent    VaultContent @relation(fields: [vaultContentId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  deviceId        String
+  ipAddress       String
+  geoLocation     String?
+  
+  authMethod      String    // BIOMETRIC, PIN, BOTH
+  accessDuration  Int       // Seconds
+  
+  accessedAt      DateTime  @default(now())
+  
+  @@index([vaultContentId])
+  @@index([userId])
+  @@map("vault_access_logs")
+}
+
+model DMCATakedown {
+  id              String    @id @default(uuid())
+  
+  // Requester
+  requesterId     String
+  requester       User      @relation("TakedownRequests", fields: [requesterId], references: [id])
+  requesterEmail  String
+  requesterName   String
+  
+  // Alleged infringer
+  infringerId     String?
+  infringer       User?     @relation("TakedownNotices", fields: [infringerId], references: [id])
+  infringingUrl   String
+  
+  // Copyright claim
+  originalWork    String    // Description
+  copyrightOwner  String
+  registrationNumber String?
+  
+  // Evidence
+  evidenceUrls    Json      // Array of evidence links
+  description     String    @db.Text
+  
+  // Status (automated processing)
+  status          String    @default("PENDING") // PENDING, PROCESSING, CONTENT_REMOVED, REJECTED, COUNTER_NOTICED
+  automatedAction Boolean   @default(true)
+  processedAt     DateTime?
+  reviewNotes     String?   @db.Text
+  
+  // Counter-notice
+  counterNotice   DMCACounterNotice?
+  
+  // Legal
+  signatureData   Json      // Digital signature
+  underPenalty    Boolean   @default(true) // Sworn under penalty of perjury
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([requesterId])
+  @@index([infringerId])
+  @@index([status])
+  @@map("dmca_takedowns")
+}
+
+model DMCACounterNotice {
+  id              String    @id @default(uuid())
+  
+  takedownId      String    @unique
+  takedown        DMCATakedown @relation(fields: [takedownId], references: [id])
+  
+  // Counter-claimant
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  name            String
+  email           String
+  address         String    @db.Text
+  
+  // Counter-claim
+  statement       String    @db.Text
+  goodFaithBelief Boolean   @default(true)
+  consentToJurisdiction Boolean @default(true)
+  
+  // Status
+  status          String    @default("SUBMITTED") // SUBMITTED, UNDER_REVIEW, ACCEPTED, REJECTED
+  reviewedAt      DateTime?
+  
+  // Restoration (10-14 days)
+  contentRestored Boolean   @default(false)
+  restoredAt      DateTime?
+  scheduledRestorationDate DateTime?
+  
+  submittedAt     DateTime  @default(now())
+  
+  @@index([userId])
+  @@map("dmca_counter_notices")
+}
+
+model LegalDocument {
+  id              String    @id @default(uuid())
+  
+  documentType    String    // TOS, PRIVACY_POLICY, DMCA_POLICY, COPYRIGHT_AGENT
+  version         String    // Semantic versioning
+  content         String    @db.Text
+  
+  effectiveDate   DateTime
+  isActive        Boolean   @default(true)
+  
+  createdBy       String?
+  createdAt       DateTime  @default(now())
+  
+  @@index([documentType])
+  @@index([isActive])
+  @@map("legal_documents")
+}
+
+// Phase 4.2: Blockchain Content Authentication
+
+model BlockchainVerification {
+  id              String    @id @default(uuid())
+  
+  // Content reference
+  contentType     String    // BIOGRAPHY, CHAPTER, PHOTO, VIDEO
+  contentId       String
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Blockchain data (Polygon MATIC)
+  contentHash     String    @unique // SHA-256 hash
+  transactionHash String?   // Polygon transaction ID
+  blockNumber     Int?
+  networkId       String    @default("polygon") // polygon mainnet
+  contractAddress String?   // Smart contract address
+  
+  // Gas payment (user-paid model)
+  gasCost         Float?    // Cost in MATIC
+  gasPaidBy       String?   // userId who paid
+  
+  // Verification status
+  status          String    @default("PENDING") // PENDING, VERIFIED, FAILED
+  verifiedAt      DateTime?
+  blockchainUrl   String?   // Polygonscan link
+  
+  // Public verification
+  publicVerificationUrl String? // Public link to verify
+  qrCodeData      String?   // QR code data for scanning
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([contentHash])
+  @@index([status])
+  @@map("blockchain_verifications")
+}
+
+model TrustBadge {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Badge details
+  level           String    // BRONZE, SILVER, GOLD, PLATINUM
+  category        String    // VERIFIED_CONTENT, DEEPFAKE_FREE, CONSISTENT_POSTER
+  
+  // Earning criteria
+  earnedBy        String    @db.Text // Description of how earned
+  verificationCount Int     @default(0)
+  deepfakeScore   Float     @default(0) // Average authenticity score
+  
+  // Display
+  badgeImageUrl   String?
+  displayOrder    Int       @default(0)
+  
+  // Metadata
+  earnedAt        DateTime  @default(now())
+  expiresAt       DateTime? // Some badges may expire
+  isActive        Boolean   @default(true)
+  
+  @@index([userId])
+  @@index([level])
+  @@index([isActive])
+  @@map("trust_badges")
+}
+
+model DeepfakeAnalysis {
+  id              String    @id @default(uuid())
+  
+  // Content reference
+  contentType     String    // IMAGE, VIDEO
+  contentId       String
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Analysis results (Microsoft Video Authenticator)
+  isDeepfake      Boolean
+  confidenceScore Float     // 0.0 - 1.0
+  detectionMethod String    @default("MICROSOFT_AUTHENTICATOR")
+  
+  // Strict threshold (>0.7 = flagged, automatic decision)
+  flagged         Boolean   @default(false)
+  autoDecision    Boolean   @default(true) // No appeals
+  
+  // Detailed analysis
+  analysisData    Json      // Detailed results from Microsoft API
+  manipulationType String?  // FACESWAP, VOICECLONE, GENERATED, NONE
+  
+  // Metadata
+  analyzedAt      DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([isDeepfake])
+  @@index([flagged])
+  @@map("deepfake_analyses")
+}
+
+// Phase 4.3: Enterprise Features - Corporate Biography Service
+
+model Organization {
+  id              String    @id @default(uuid())
+  
+  // Company details
+  companyName     String
+  slug            String    @unique
+  industry        String?
+  size            String?   // STARTUP_1_10, SCALEUP_11_50, ENTERPRISE_51_PLUS
+  website         String?
+  logoUrl         String?
+  description     String?   @db.Text
+  
+  // Billing (annual upfront)
+  subscriptionTier String   @default("STARTER") // STARTER, PROFESSIONAL, ENTERPRISE, ENTERPRISE_PLUS
+  subscriptionStatus String @default("TRIAL") // TRIAL, ACTIVE, SUSPENDED, CANCELLED
+  billingEmail    String
+  stripeCustomerId String?  @unique
+  stripeSubscriptionId String? @unique
+  
+  // Trial (30 days enterprise-friendly)
+  trialEndsAt     DateTime?
+  
+  // Limits (auto-upgrade)
+  maxUsers        Int       @default(10)
+  currentUsers    Int       @default(0)
+  autoUpgrade     Boolean   @default(true)
+  
+  // Features
+  features        Json      // Feature flags by tier
+  customIntegrations Json?  // Enterprise Plus custom integrations
+  
+  // Data retention (user configurable)
+  dataRetentionMonths Int?  // null = unlimited
+  
+  // Relationships
+  memberships     OrganizationMembership[]
+  timelines       CompanyTimeline[]
+  integrations    CorporateIntegration[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([slug])
+  @@index([subscriptionTier])
+  @@index([subscriptionStatus])
+  @@map("organizations")
+}
+
+model OrganizationMembership {
+  id              String    @id @default(uuid())
+  
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // RBAC (5 roles)
+  role            String    // ADMIN, EDITOR, VIEWER, RECRUITER, IR_MANAGER
+  permissions     Json      // Granular permissions override
+  
+  // Status
+  status          String    @default("INVITED") // INVITED, ACTIVE, SUSPENDED, REMOVED
+  invitedBy       String?
+  invitedAt       DateTime  @default(now())
+  joinedAt        DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+  @@map("organization_memberships")
+}
+
+model CompanyTimeline {
+  id              String    @id @default(uuid())
+  
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Milestone details
+  title           String
+  description     String    @db.Text
+  category        String    // FOUNDING, FUNDING, PRODUCT_LAUNCH, HIRE, ACQUISITION, PARTNERSHIP
+  date            DateTime
+  
+  // Media
+  imageUrl        String?
+  videoUrl        String?
+  attachments     Json?
+  
+  // Integration source (auto-import)
+  source          String    @default("MANUAL") // MANUAL, SLACK, GITHUB, GOOGLE, CUSTOM
+  sourceId        String?   // External ID from integration
+  sourceData      Json?     // Raw data from integration
+  
+  // Visibility
+  isPublic        Boolean   @default(false)
+  isRecruiting    Boolean   @default(false) // Show on recruiting page
+  isInvestor      Boolean   @default(false) // Show on IR page
+  
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([organizationId])
+  @@index([date])
+  @@index([category])
+  @@map("company_timelines")
+}
+
+model CorporateIntegration {
+  id              String    @id @default(uuid())
+  
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  
+  // Integration details
+  provider        String    // SLACK, GITHUB, GOOGLE_WORKSPACE, CUSTOM
+  providerName    String?   // For custom integrations
+  status          String    @default("DISCONNECTED") // CONNECTED, DISCONNECTED, ERROR, SYNCING
+  
+  // OAuth
+  accessToken     String?   @db.Text // Encrypted
+  refreshToken    String?   @db.Text // Encrypted
+  expiresAt       DateTime?
+  
+  // Configuration
+  config          Json      // Provider-specific config
+  webhookUrl      String?   // For real-time updates
+  
+  // Sync settings
+  lastSyncedAt    DateTime?
+  syncEnabled     Boolean   @default(true)
+  autoImport      Boolean   @default(true) // Auto-create timeline milestones
+  syncFrequency   String    @default("HOURLY") // HOURLY, DAILY, WEEKLY
+  
+  // Data retention (user configurable)
+  retentionPolicy String    @default("ORGANIZATION") // ORGANIZATION, CUSTOM
+  customRetentionMonths Int?
+  
+  connectedBy     String
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@unique([organizationId, provider])
+  @@index([organizationId])
+  @@index([status])
+  @@map("corporate_integrations")
+}
+
+// Phase 4.4: Celebrity & Athlete Management Service
+
+model CelebrityProfile {
+  id              String    @id @default(uuid())
+  
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Public persona
+  stageName       String?
+  profession      String[]  // ATHLETE, ACTOR, MUSICIAN, INFLUENCER, PUBLIC_FIGURE
+  sport           String?   // For athletes: FOOTBALL, BASKETBALL, SOCCER, etc
+  team            String?
+  position        String?
+  jerseyNumber    Int?
+  
+  // Career info
+  careerStartDate DateTime?
+  achievements    Json      // Awards, titles, records
+  brandValue      Float?    // Estimated brand value ($)
+  
+  // Social media (verified accounts)
+  twitterHandle   String?
+  instagramHandle String?
+  tiktokHandle    String?
+  youtubeChannel  String?
+  followerCount   Int?      // Combined followers
+  
+  // Management team
+  agentName       String?
+  agentEmail      String?
+  publicistName   String?
+  publicistEmail  String?
+  managerName     String?
+  managerEmail    String?
+  
+  // Subscription (premium pricing)
+  tier            String    @default("RISING_STAR") // RISING_STAR, ESTABLISHED, ICON, LEGEND
+  subscriptionStatus String @default("TRIAL")
+  monthlyMonitoringFee Float @default(15000) // Additional fee for media monitoring
+  
+  // Relationships
+  analytics       CareerAnalytics[]
+  mediaMentions   MediaMention[]
+  legacyPlan      LegacyPlan?
+  nftCollection   NFTCollection?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([tier])
+  @@index([subscriptionStatus])
+  @@map("celebrity_profiles")
+}
+
+model CareerAnalytics {
+  id              String    @id @default(uuid())
+  
+  celebrityId     String
+  celebrity       CelebrityProfile @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
+  
+  // Metrics
+  metricType      String    // PERFORMANCE, SOCIAL_MEDIA, REVENUE, BRAND, ENDORSEMENTS
+  metricName      String    // Specific metric (points_per_game, follower_growth, etc)
+  value           Float
+  unit            String?   // Unit of measurement
+  
+  // Context
+  period          String    // DAILY, WEEKLY, MONTHLY, SEASON, YEARLY, CAREER
+  date            DateTime
+  metadata        Json?     // Additional context
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([celebrityId])
+  @@index([date])
+  @@index([metricType])
+  @@map("career_analytics")
+}
+
+model MediaMention {
+  id              String    @id @default(uuid())
+  
+  celebrityId     String
+  celebrity       CelebrityProfile @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
+  
+  // Source
+  source          String    // NEWS, TWITTER, INSTAGRAM, TIKTOK, YOUTUBE, REDDIT
+  sourceUrl       String?
+  sourceName      String?   // Publication/account name
+  author          String?
+  
+  // Content
+  title           String?
+  snippet         String    @db.Text
+  fullText        String?   @db.Text
+  imageUrl        String?
+  
+  // Google NLP Sentiment Analysis
+  sentimentScore  Float     // -1.0 to 1.0 (negative to positive)
+  sentimentMagnitude Float  // 0.0 to infinity (strength of emotion)
+  sentimentLabel  String    // VERY_NEGATIVE, NEGATIVE, NEUTRAL, POSITIVE, VERY_POSITIVE
+  
+  // Emotions (Google NLP)
+  emotions        Json?     // Joy, anger, fear, sadness percentages
+  
+  // Topics & entities
+  topics          String[]  // Extracted topics
+  entities        Json?     // Named entities (people, places, orgs)
+  
+  // Engagement metrics
+  likes           Int?
+  shares          Int?
+  comments        Int?
+  views           Int?
+  reachEstimate   Int?
+  
+  publishedAt     DateTime
+  analyzedAt      DateTime  @default(now())
+  
+  @@index([celebrityId])
+  @@index([publishedAt])
+  @@index([sentimentScore])
+  @@index([source])
+  @@map("media_mentions")
+}
+
+model LegacyPlan {
+  id              String    @id @default(uuid())
+  
+  celebrityId     String    @unique
+  celebrity       CelebrityProfile @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
+  
+  // Digital will - executor
+  executorUserId  String?
+  executor        User?     @relation("LegacyExecutor", fields: [executorUserId], references: [id])
+  executorName    String?
+  executorEmail   String?
+  executorPhone   String?
+  
+  // Beneficiaries
+  beneficiaries   Json      // [{name, email, relationship, accessLevel}]
+  
+  // Posthumous content
+  scheduledPosts  Json      // Posts to release after death
+  privateLetters  Json      // Letters to loved ones
+  finalMessage    String?   @db.Text // Final public message
+  
+  // Account management
+  accountActions  Json      // {platform: action} - archive, delete, memorialize
+  
+  // Content distribution
+  unreleased      Json?     // Unreleased music, films, etc to distribute
+  archiveAccess   Json?     // Who gets access to private archives
+  
+  // Legal documents
+  legalDocuments  String[]  // URLs to uploaded legal docs
+  witnessNames    String[]
+  witnessContacts String[]
+  notarized       Boolean   @default(false)
+  notaryInfo      String?
+  
+  // Activation
+  isActive        Boolean   @default(false)
+  activationMethod String?  // AUTOMATIC, MANUAL_TRIGGER, DEATH_CERTIFICATE
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("legacy_plans")
+}
+
+model NFTCollection {
+  id              String    @id @default(uuid())
+  
+  celebrityId     String    @unique
+  celebrity       CelebrityProfile @relation(fields: [celebrityId], references: [id], onDelete: Cascade)
+  
+  // Collection metadata
+  collectionName  String
+  collectionSymbol String
+  description     String    @db.Text
+  bannerImage     String?
+  
+  // Blockchain (Polygon)
+  blockchain      String    @default("polygon")
+  contractAddress String?   @unique
+  deployedAt      DateTime?
+  
+  // NFTs
+  nfts            CelebrityNFT[]
+  
+  // Stats
+  totalMinted     Int       @default(0)
+  totalVolume     Float     @default(0) // Total trading volume
+  floorPrice      Float?
+  
+  // Platform commission (10-15%)
+  platformCommission Float  @default(0.125) // 12.5% default
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("nft_collections")
+}
+
+model CelebrityNFT {
+  id              String    @id @default(uuid())
+  
+  collectionId    String
+  collection      NFTCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  
+  // NFT metadata
+  tokenId         Int?
+  name            String
+  description     String    @db.Text
+  category        String    // CAREER_HIGHLIGHT, MEMORABILIA, ACHIEVEMENT, GAME_MOMENT, LIMITED_EDITION
+  
+  // Media
+  imageUrl        String
+  videoUrl        String?
+  animationUrl    String?
+  ipfsHash        String?   // IPFS content hash
+  
+  // Attributes
+  attributes      Json      // Rarity traits, stats, etc
+  
+  // Blockchain (Polygon)
+  transactionHash String?
+  blockNumber     Int?
+  mintedAt        DateTime?
+  
+  // Marketplace
+  isListed        Boolean   @default(false)
+  listPrice       Float?
+  id              String    @id @default(uuid())
+  
+  name            String    @unique // FEATURE_PREDICTIONS, FEATURE_AUDIO_INTERROGATOR, etc.
+  enabled         Boolean   @default(false)
+  description     String?
+  
+  // Rollout strategy
+  enabledForUsers String[]  // User IDs for beta testing
+  rolloutPct      Float     @default(0) // 0-100% gradual rollout
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("feature_flags")
+}
+
+// Phase 5.1: Prediction Engine Models
+
+model LifeEventPrediction {
+  id              String    @id @default(uuid())
+  
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  // Prediction details
+  eventType       String    // JOB_CHANGE, RELATIONSHIP_CHANGE, RELOCATION, HEALTH_EVENT
+  category        String    // CAREER, RELATIONSHIPS, HEALTH, LIFESTYLE
+  
+  // Prediction
+  predictedDate   DateTime?
+  confidenceScore Float     // 0.0 to 1.0
+  description     String    @db.Text
+  
+  // Model info
+  modelVersion    String
+  modelName       String    // LSTM, PROPHET, HYBRID
+  
+  // Pattern basis
+  basedOnPatterns Json      // Historical patterns that led to prediction
+  
+  // Outcome tracking (for accuracy)
+  actualDate      DateTime?
+  didOccur        Boolean?
+  accuracyScore   Float?    // Calculated after event window
+  
+  // Visibility
+  isPublic        Boolean   @default(false) // Creator controls if subscribers see
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@index([eventType])
+  @@index([predictedDate])
+  @@map("life_event_predictions")
+}
+
+model PredictionModel {
+  id              String    @id @default(uuid())
+  
+  name            String    // LSTM_V1, PROPHET_V1
+  version         String
+  modelType       String    // LSTM, PROPHET, HYBRID
+  
+  // Model files
+  modelPath       String    // Path to saved model
+  
+  // Performance metrics
+  accuracy        Float?
+  precision       Float?
+  recall          Float?
+  f1Score         Float?
+  
+  // Training info
+  trainedOn       DateTime
+  trainingDataSize Int
+  
+  // Status
+  isActive        Boolean   @default(false)
+  
+  // Accuracy tracking
+  accuracyHistory PredictionAccuracy[]
+  
+  createdAt       DateTime  @default(now())
+  
+  @@unique([name, version])
+  @@map("prediction_models")
+}
+
+model PredictionAccuracy {
+  id              String    @id @default(uuid())
+  
+  modelId         String
+  model           PredictionModel @relation(fields: [modelId], references: [id])
+  
+  predictionId    String
+  prediction      LifeEventPrediction @relation(fields: [predictionId], references: [id])
+  
+  // Accuracy metrics
+  wasCorrect      Boolean
+  daysOff         Int?      // How many days off was the prediction
+  
+  // Evaluation
+  evaluatedAt     DateTime  @default(now())
+  
+  @@index([modelId])
+  @@index([predictionId])
+  @@map("prediction_accuracy")
+}
