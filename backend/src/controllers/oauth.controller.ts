@@ -1,361 +1,480 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
-import { OAuthService } from '../services/oauth.service';
-import { AuthRequest } from '../middleware/auth.middleware';
-import prisma from '../db/prisma';
+import { PrismaClient } from '@prisma/client';
+import { InstagramService } from '../services/instagram.service';
+import { TwitterService } from '../services/twitter.service';
+import { FacebookService } from '../services/facebook.service';
+import { LinkedInService } from '../services/linkedin.service';
+import { GmailService } from '../services/gmail.service';
+import { OutlookService } from '../services/outlook.service';
+import { pkceService } from '../services/pkce.service';
+import Logger from '../utils/logger';
 
-// Helper to generate state for CSRF protection
-const generateState = (): string => crypto.randomBytes(32).toString('hex');
+const prisma = new PrismaClient();
+const instagramService = new InstagramService();
+const twitterService = new TwitterService();
+const facebookService = new FacebookService();
+const linkedInService = new LinkedInService();
+const gmailService = new GmailService();
+const outlookService = new OutlookService();
 
-// Helper for Twitter PKCE
-const generateCodeVerifier = (): string => crypto.randomBytes(32).toString('base64url');
-const generateCodeChallenge = (verifier: string): string => {
-    return crypto.createHash('sha256').update(verifier).digest('base64url');
-};
-
-// Store state/verifier temporarily (in production, use Redis)
-const oauthStates = new Map<string, { userId: string; codeVerifier?: string; provider: string }>();
-
-// Instagram OAuth Flow
-export const initiateInstagramOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+export class OAuthController {
+    // Instagram OAuth
+    async instagramAuth(req: Request, res: Response) {
+        try {
+            const authUrl = instagramService.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (error) {
+            console.error('Instagram auth error:', error);
+            res.status(500).json({ error: 'Failed to initiate Instagram authentication' });
         }
-
-        const state = generateState();
-        oauthStates.set(state, { userId: req.user.userId, provider: 'INSTAGRAM' });
-
-        const authUrl = OAuthService.getInstagramAuthUrl(state);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('Instagram OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate Instagram OAuth' });
     }
-};
 
-export const handleInstagramCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async instagramCallback(req: Request, res: Response) {
+        try {
+            const { code } = req.query;
+            if (!code || typeof code !== 'string') {
+                return res.status(400).json({ error: 'Authorization code missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            // Exchange code for token
+            const tokenData = await instagramService.exchangeCodeForToken(code);
+
+            // Create or find user (simplified - in production, link to authenticated user)
+            let user = await prisma.user.findFirst({
+                where: {
+                    socialAccounts: {
+                        some: {
+                            provider: 'INSTAGRAM',
+                            providerId: tokenData.user_id.toString(),
+                        },
+                    },
+                },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: `instagram_${tokenData.user_id}@temp.com`, // Temporary email
+                        name: 'Instagram User',
+                    },
+                });
+            }
+
+            // Store or update social account
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'INSTAGRAM',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    providerId: tokenData.user_id.toString(),
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'INSTAGRAM',
+                    providerId: tokenData.user_id.toString(),
+                    accessToken: tokenData.access_token,
+                },
+            });
+
+            // Fetch initial media
+            await instagramService.fetchMedia(tokenData.access_token, user.id);
+
+            res.json({
+                success: true,
+                message: 'Instagram connected successfully',
+                userId: user.id,
+            });
+        } catch (error) {
+            console.error('Instagram callback error:', error);
+            res.status(500).json({ error: 'Failed to complete Instagram authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        // Exchange code for token
-        const shortLivedTokens = await OAuthService.exchangeInstagramCode(code as string);
-        const longLivedTokens = await OAuthService.getInstagramLongLivedToken(shortLivedTokens.accessToken);
-
-        // Store in database
-        await OAuthService.storeDataSource(stateData.userId, 'INSTAGRAM', {
-            ...longLivedTokens,
-            providerUserId: shortLivedTokens.providerUserId,
-        });
-
-        // Redirect to mobile app with success
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=instagram`);
-    } catch (error) {
-        console.error('Instagram callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=instagram`);
     }
-};
 
-// Twitter OAuth Flow
-export const initiateTwitterOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+    // Twitter OAuth
+    async twitterAuth(req: Request, res: Response) {
+        try {
+            const { codeVerifier, codeChallenge } = twitterService.generatePKCE();
+            const state = pkceService.generateState();
+
+            // Store PKCE in Redis with TTL
+            await pkceService.store(state, { codeVerifier });
+
+            const authUrl = twitterService.getAuthUrl(codeChallenge, state);
+            res.redirect(authUrl);
+        } catch (error: any) {
+            Logger.error(`Twitter auth error: ${error.message}`);
+            res.status(500).json({ error: 'Failed to initiate Twitter authentication' });
         }
-
-        const state = generateState();
-        const codeVerifier = generateCodeVerifier();
-        const codeChallenge = generateCodeChallenge(codeVerifier);
-
-        oauthStates.set(state, { userId: req.user.userId, codeVerifier, provider: 'TWITTER' });
-
-        const authUrl = OAuthService.getTwitterAuthUrl(state, codeChallenge);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('Twitter OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate Twitter OAuth' });
     }
-};
 
-export const handleTwitterCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async twitterCallback(req: Request, res: Response) {
+        try {
+            const { code, state } = req.query;
+            if (!code || typeof code !== 'string' || !state || typeof state !== 'string') {
+                return res.status(400).json({ error: 'Authorization code or state missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            // Retrieve and validate PKCE data (CSRF protection)
+            const pkceData = await pkceService.retrieve(state);
+            if (!pkceData) {
+                Logger.warn(`Invalid or expired state parameter: ${state}`);
+                return res.status(400).json({ error: 'Invalid or expired state parameter' });
+            }
+
+            // Exchange code for token
+            const tokenData = await twitterService.exchangeCodeForToken(
+                code,
+                pkceData.codeVerifier
+            );
+
+            // Get Twitter user info
+            const twitterUser = await twitterService.getUserInfo(tokenData.access_token);
+
+            // Create or find user
+            let user = await prisma.user.findFirst({
+                where: {
+                    socialAccounts: {
+                        some: {
+                            provider: 'TWITTER',
+                            providerId: twitterUser.id,
+                        },
+                    },
+                },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: `twitter_${twitterUser.id}@temp.com`, // Temporary email
+                        name: twitterUser.name,
+                    },
+                });
+            }
+
+            // Store or update social account
+            const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'TWITTER',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                    providerId: twitterUser.id,
+                    expiresAt,
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'TWITTER',
+                    providerId: twitterUser.id,
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                    expiresAt,
+                },
+            });
+
+            // Fetch initial tweets
+            await twitterService.fetchTweets(tokenData.access_token, twitterUser.id, user.id);
+
+            Logger.info(`Twitter connected successfully for user: ${user.id}`);
+
+            res.json({
+                success: true,
+                message: 'Twitter connected successfully',
+                userId: user.id,
+            });
+        } catch (error: any) {
+            Logger.error(`Twitter callback error: ${error.message}`);
+            res.status(500).json({ error: 'Failed to complete Twitter authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData || !stateData.codeVerifier) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        const tokens = await OAuthService.exchangeTwitterCode(code as string, stateData.codeVerifier);
-        await OAuthService.storeDataSource(stateData.userId, 'TWITTER', tokens);
-
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=twitter`);
-    } catch (error) {
-        console.error('Twitter callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=twitter`);
     }
-};
 
-// Facebook OAuth Flow
-export const initiateFacebookOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+    // Facebook OAuth
+    async facebookAuth(req: Request, res: Response) {
+        try {
+            const authUrl = facebookService.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (error) {
+            console.error('Facebook auth error:', error);
+            res.status(500).json({ error: 'Failed to initiate Facebook authentication' });
         }
-
-        const state = generateState();
-        oauthStates.set(state, { userId: req.user.userId, provider: 'FACEBOOK' });
-
-        const authUrl = OAuthService.getFacebookAuthUrl(state);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('Facebook OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate Facebook OAuth' });
     }
-};
 
-export const handleFacebookCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async facebookCallback(req: Request, res: Response) {
+        try {
+            const { code } = req.query;
+            if (!code || typeof code !== 'string') {
+                return res.status(400).json({ error: 'Authorization code missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            const tokenData = await facebookService.exchangeCodeForToken(code);
+            const fbUser = await facebookService.getUserInfo(tokenData.access_token);
+
+            let user = await prisma.user.findFirst({
+                where: {
+                    socialAccounts: {
+                        some: {
+                            provider: 'FACEBOOK',
+                            providerId: fbUser.id,
+                        },
+                    },
+                },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: fbUser.email || `facebook_${fbUser.id}@temp.com`,
+                        name: fbUser.name,
+                    },
+                });
+            }
+
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'FACEBOOK',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    providerId: fbUser.id,
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'FACEBOOK',
+                    providerId: fbUser.id,
+                    accessToken: tokenData.access_token,
+                },
+            });
+
+            await facebookService.fetchPosts(tokenData.access_token, user.id);
+
+            res.json({
+                success: true,
+                message: 'Facebook connected successfully',
+                userId: user.id,
+            });
+        } catch (error) {
+            console.error('Facebook callback error:', error);
+            res.status(500).json({ error: 'Failed to complete Facebook authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        const tokens = await OAuthService.exchangeFacebookCode(code as string);
-        await OAuthService.storeDataSource(stateData.userId, 'FACEBOOK', tokens);
-
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=facebook`);
-    } catch (error) {
-        console.error('Facebook callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=facebook`);
     }
-};
 
-// LinkedIn OAuth Flow
-export const initiateLinkedInOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+    // LinkedIn OAuth
+    async linkedinAuth(req: Request, res: Response) {
+        try {
+            const authUrl = linkedInService.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (error) {
+            console.error('LinkedIn auth error:', error);
+            res.status(500).json({ error: 'Failed to initiate LinkedIn authentication' });
         }
-
-        const state = generateState();
-        oauthStates.set(state, { userId: req.user.userId, provider: 'LINKEDIN' });
-
-        const authUrl = OAuthService.getLinkedInAuthUrl(state);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('LinkedIn OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate LinkedIn OAuth' });
     }
-};
 
-export const handleLinkedInCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async linkedinCallback(req: Request, res: Response) {
+        try {
+            const { code } = req.query;
+            if (!code || typeof code !== 'string') {
+                return res.status(400).json({ error: 'Authorization code missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            const tokenData = await linkedInService.exchangeCodeForToken(code);
+            const linkedInUser = await linkedInService.getUserInfo(tokenData.access_token);
+
+            let user = await prisma.user.findFirst({
+                where: {
+                    socialAccounts: {
+                        some: {
+                            provider: 'LINKEDIN',
+                            providerId: linkedInUser.sub,
+                        },
+                    },
+                },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: linkedInUser.email || `linkedin_${linkedInUser.sub}@temp.com`,
+                        name: linkedInUser.name,
+                    },
+                });
+            }
+
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'LINKEDIN',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    providerId: linkedInUser.sub,
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'LINKEDIN',
+                    providerId: linkedInUser.sub,
+                    accessToken: tokenData.access_token,
+                },
+            });
+
+            await linkedInService.fetchPosts(tokenData.access_token, user.id);
+
+            res.json({
+                success: true,
+                message: 'LinkedIn connected successfully',
+                userId: user.id,
+            });
+        } catch (error) {
+            console.error('LinkedIn callback error:', error);
+            res.status(500).json({ error: 'Failed to complete LinkedIn authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        const tokens = await OAuthService.exchangeLinkedInCode(code as string);
-        await OAuthService.storeDataSource(stateData.userId, 'LINKEDIN', tokens);
-
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=linkedin`);
-    } catch (error) {
-        console.error('LinkedIn callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=linkedin`);
     }
-};
 
-// Google OAuth Flow (for Gmail)
-export const initiateGoogleOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+    // Gmail OAuth
+    async gmailAuth(req: Request, res: Response) {
+        try {
+            const authUrl = gmailService.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (error) {
+            console.error('Gmail auth error:', error);
+            res.status(500).json({ error: 'Failed to initiate Gmail authentication' });
         }
-
-        const state = generateState();
-        oauthStates.set(state, { userId: req.user.userId, provider: 'GMAIL' });
-
-        const authUrl = OAuthService.getGoogleAuthUrl(state);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('Google OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate Google OAuth' });
     }
-};
 
-export const handleGoogleCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async gmailCallback(req: Request, res: Response) {
+        try {
+            const { code } = req.query;
+            if (!code || typeof code !== 'string') {
+                return res.status(400).json({ error: 'Authorization code missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            const tokenData = await gmailService.exchangeCodeForToken(code);
+            const userEmail = await gmailService.getUserEmail(tokenData.access_token);
+
+            let user = await prisma.user.findUnique({
+                where: { email: userEmail },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: userEmail,
+                        name: userEmail.split('@')[0],
+                    },
+                });
+            }
+
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'GMAIL',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                    providerId: userEmail,
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'GMAIL',
+                    providerId: userEmail,
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                },
+            });
+
+            await gmailService.fetchEmails(tokenData.access_token, tokenData.refresh_token, user.id);
+
+            res.json({
+                success: true,
+                message: 'Gmail connected successfully',
+                userId: user.id,
+            });
+        } catch (error) {
+            console.error('Gmail callback error:', error);
+            res.status(500).json({ error: 'Failed to complete Gmail authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        const tokens = await OAuthService.exchangeGoogleCode(code as string);
-        await OAuthService.storeDataSource(stateData.userId, 'GMAIL', tokens);
-
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=google`);
-    } catch (error) {
-        console.error('Google callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=google`);
     }
-};
 
-// Microsoft OAuth Flow (for Outlook)
-export const initiateMicrosoftOAuth = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
+    // Outlook OAuth
+    async outlookAuth(req: Request, res: Response) {
+        try {
+            const authUrl = outlookService.getAuthUrl();
+            res.redirect(authUrl);
+        } catch (error) {
+            console.error('Outlook auth error:', error);
+            res.status(500).json({ error: 'Failed to initiate Outlook authentication' });
         }
-
-        const state = generateState();
-        oauthStates.set(state, { userId: req.user.userId, provider: 'OUTLOOK' });
-
-        const authUrl = OAuthService.getMicrosoftAuthUrl(state);
-        res.json({ authUrl });
-    } catch (error) {
-        console.error('Microsoft OAuth initiation error:', error);
-        res.status(500).json({ error: 'Failed to initiate Microsoft OAuth' });
     }
-};
 
-export const handleMicrosoftCallback = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { code, state } = req.query;
+    async outlookCallback(req: Request, res: Response) {
+        try {
+            const { code } = req.query;
+            if (!code || typeof code !== 'string') {
+                return res.status(400).json({ error: 'Authorization code missing' });
+            }
 
-        if (!code || !state) {
-            res.status(400).json({ error: 'Missing code or state' });
-            return;
+            const tokenData = await outlookService.exchangeCodeForToken(code);
+            const outlookUser = await outlookService.getUserInfo(tokenData.access_token);
+
+            let user = await prisma.user.findUnique({
+                where: { email: outlookUser.mail },
+            });
+
+            if (!user) {
+                user = await prisma.user.create({
+                    data: {
+                        email: outlookUser.mail,
+                        name: outlookUser.displayName,
+                    },
+                });
+            }
+
+            await prisma.socialAccount.upsert({
+                where: {
+                    userId_provider: {
+                        userId: user.id,
+                        provider: 'OUTLOOK',
+                    },
+                },
+                update: {
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                    providerId: outlookUser.mail,
+                },
+                create: {
+                    userId: user.id,
+                    provider: 'OUTLOOK',
+                    providerId: outlookUser.mail,
+                    accessToken: tokenData.access_token,
+                    refreshToken: tokenData.refresh_token,
+                },
+            });
+
+            await outlookService.fetchEmails(tokenData.access_token, user.id);
+
+            res.json({
+                success: true,
+                message: 'Outlook connected successfully',
+                userId: user.id,
+            });
+        } catch (error) {
+            console.error('Outlook callback error:', error);
+            res.status(500).json({ error: 'Failed to complete Outlook authentication' });
         }
-
-        const stateData = oauthStates.get(state as string);
-        if (!stateData) {
-            res.status(400).json({ error: 'Invalid state' });
-            return;
-        }
-
-        oauthStates.delete(state as string);
-
-        const tokens = await OAuthService.exchangeMicrosoftCode(code as string);
-        await OAuthService.storeDataSource(stateData.userId, 'OUTLOOK', tokens);
-
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-success?provider=microsoft`);
-    } catch (error) {
-        console.error('Microsoft callback error:', error);
-        res.redirect(`${process.env.FRONTEND_URL}/oauth-error?provider=microsoft`);
     }
-};
-
-// Get connected data sources
-export const getConnectedDataSources = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
-
-        const dataSources = await prisma.dataSource.findMany({
-            where: { userId: req.user.userId },
-            select: {
-                id: true,
-                type: true,
-                status: true,
-                providerUsername: true,
-                lastSyncAt: true,
-                syncCount: true,
-                createdAt: true,
-            },
-        });
-
-        res.json({ dataSources });
-    } catch (error) {
-        console.error('Get data sources error:', error);
-        res.status(500).json({ error: 'Failed to get data sources' });
-    }
-};
-
-// Disconnect data source
-export const disconnectDataSource = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        if (!req.user) {
-            res.status(401).json({ error: 'Unauthorized' });
-            return;
-        }
-
-        const { dataSourceId } = req.params;
-
-        await prisma.dataSource.update({
-            where: {
-                id: dataSourceId,
-                userId: req.user.userId,
-            },
-            data: {
-                status: 'DISCONNECTED',
-                accessToken: null,
-                refreshToken: null,
-            },
-        });
-
-        res.json({ message: 'Data source disconnected successfully' });
-    } catch (error) {
-        console.error('Disconnect data source error:', error);
-        res.status(500).json({ error: 'Failed to disconnect data source' });
-    }
-};
+}

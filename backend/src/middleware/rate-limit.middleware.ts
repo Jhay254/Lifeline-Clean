@@ -1,53 +1,45 @@
 import rateLimit from 'express-rate-limit';
-import { Request, Response } from 'express';
 
-/**
- * Rate limiter for authentication endpoints
- * Prevents brute force attacks
- */
-export const authRateLimiter = rateLimit({
+// Global rate limiter: 100 requests per 15 minutes
+export const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Limit each IP to 5 requests per windowMs
-    message: 'Too many login attempts. Please try again in 15 minutes.',
-    standardHeaders: true,
-    legacyHeaders: false,
-    handler: (req: Request, res: Response) => {
-        res.status(429).json({
-            success: false,
-            message: 'Too many attempts. Please try again later.',
-        });
+    max: 100, // Limit each IP to 100 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    message: {
+        error: 'Too many requests from this IP, please try again after 15 minutes',
     },
 });
 
-/**
- * Rate limiter for password reset endpoints
- */
-export const passwordResetRateLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // Limit each IP to 3 requests per hour
-    message: 'Too many password reset requests. Please try again in 1 hour.',
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-/**
- * Rate limiter for email verification resend
- */
-export const verificationRateLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 5, // Limit each IP to 5 requests per hour
-    message: 'Too many verification requests. Please try again in 1 hour.',
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-/**
- * General API rate limiter
- */
-export const apiRateLimiter = rateLimit({
+// Auth rate limiter: 5 requests per 15 minutes (to prevent brute force)
+export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: 'Too many requests. Please try again later.',
+    max: 5,
     standardHeaders: true,
     legacyHeaders: false,
+    message: {
+        error: 'Too many login attempts, please try again after 15 minutes',
+    },
+});
+
+// OAuth rate limiter: 10 requests per 15 minutes
+export const oauthLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: 'Too many OAuth attempts, please try again later',
+    },
+});
+
+// Media rate limiter: 50 requests per 15 minutes
+export const mediaLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: {
+        error: 'Too many media requests, please try again later',
+    },
 });

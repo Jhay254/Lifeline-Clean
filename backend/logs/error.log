@@ -1,0 +1,2 @@
+{"level":"error","message":"GET /me 401 2ms","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"error","message":"GET /me 429 5ms","timestamp":"2025-11-30 01:36:36:3636"}

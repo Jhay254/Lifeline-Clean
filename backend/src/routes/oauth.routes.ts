@@ -1,50 +1,33 @@
 import { Router } from 'express';
-import {
-    initiateInstagramOAuth,
-    handleInstagramCallback,
-    initiateTwitterOAuth,
-    handleTwitterCallback,
-    initiateFacebookOAuth,
-    handleFacebookCallback,
-    initiateLinkedInOAuth,
-    handleLinkedInCallback,
-    initiateGoogleOAuth,
-    handleGoogleCallback,
-    initiateMicrosoftOAuth,
-    handleMicrosoftCallback,
-    getConnectedDataSources,
-    disconnectDataSource,
-} from '../controllers/oauth.controller';
-import { authenticate } from '../middleware/auth.middleware';
+import { OAuthController } from '../controllers/oauth.controller';
+import { validate } from '../middleware/validation.middleware';
+import { oauthCallbackSchema, twitterCallbackSchema } from '../schemas/oauth.schema';
 
 const router = Router();
+const oauthController = new OAuthController();
 
-// Instagram OAuth
-router.get('/instagram/initiate', authenticate, initiateInstagramOAuth);
-router.get('/instagram/callback', handleInstagramCallback);
+// Instagram routes
+router.get('/instagram', (req, res) => oauthController.instagramAuth(req, res));
+router.get('/instagram/callback', validate(oauthCallbackSchema, 'query'), (req, res) => oauthController.instagramCallback(req, res));
 
-// Twitter OAuth
-router.get('/twitter/initiate', authenticate, initiateTwitterOAuth);
-router.get('/twitter/callback', handleTwitterCallback);
+// Twitter routes
+router.get('/twitter', (req, res) => oauthController.twitterAuth(req, res));
+router.get('/twitter/callback', validate(twitterCallbackSchema, 'query'), (req, res) => oauthController.twitterCallback(req, res));
 
-// Facebook OAuth
-router.get('/facebook/initiate', authenticate, initiateFacebookOAuth);
-router.get('/facebook/callback', handleFacebookCallback);
+// Facebook routes
+router.get('/facebook', (req, res) => oauthController.facebookAuth(req, res));
+router.get('/facebook/callback', validate(oauthCallbackSchema, 'query'), (req, res) => oauthController.facebookCallback(req, res));
 
-// LinkedIn OAuth
-router.get('/linkedin/initiate', authenticate, initiateLinkedInOAuth);
-router.get('/linkedin/callback', handleLinkedInCallback);
+// LinkedIn routes
+router.get('/linkedin', (req, res) => oauthController.linkedinAuth(req, res));
+router.get('/linkedin/callback', validate(oauthCallbackSchema, 'query'), (req, res) => oauthController.linkedinCallback(req, res));
 
-// Google OAuth (Gmail)
-router.get('/google/initiate', authenticate, initiateGoogleOAuth);
-router.get('/google/callback', handleGoogleCallback);
+// Gmail routes
+router.get('/gmail', (req, res) => oauthController.gmailAuth(req, res));
+router.get('/gmail/callback', validate(oauthCallbackSchema, 'query'), (req, res) => oauthController.gmailCallback(req, res));
 
-// Microsoft OAuth (Outlook)
-router.get('/microsoft/initiate', authenticate, initiateMicrosoftOAuth);
-router.get('/microsoft/callback', handleMicrosoftCallback);
-
-// Data Sources Management
-router.get('/data-sources', authenticate, getConnectedDataSources);
-router.delete('/data-sources/:dataSourceId', authenticate, disconnectDataSource);
+// Outlook routes
+router.get('/outlook', (req, res) => oauthController.outlookAuth(req, res));
+router.get('/outlook/callback', validate(oauthCallbackSchema, 'query'), (req, res) => oauthController.outlookCallback(req, res));
 
 export default router;

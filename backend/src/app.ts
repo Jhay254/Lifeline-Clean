@@ -1,0 +1,68 @@
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './config/swagger';
+import { requestLogger } from './middleware/logger.middleware';
+import { globalLimiter, authLimiter, oauthLimiter, mediaLimiter } from './middleware/rate-limit.middleware';
+import authRoutes from './routes/auth.routes';
+import oauthRoutes from './routes/oauth.routes';
+import mediaRoutes from './routes/media.routes';
+import Logger from './utils/logger';
+
+const app = express();
+
+// Security middleware
+app.use(helmet());
+
+// Compression middleware (gzip)
+app.use(compression({
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) {
+            return false;
+        }
+        return compression.filter(req, res);
+    },
+    level: 6, // Compression level (0-9)
+}));
+
+// CORS configuration
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3001',
+    credentials: true,
+}));
+
+// Request logging
+app.use(requestLogger);
+
+// Body parsing
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customCss: '.swagger-ui .topbar { display: none }',
+    customSiteTitle: 'Lifeline API Documentation',
+}));
+
+// Apply global rate limiter to all requests
+app.use(globalLimiter);
+
+// Routes
+app.use('/auth', authLimiter, authRoutes);
+app.use('/auth', oauthLimiter, oauthRoutes);
+app.use('/media', mediaLimiter, mediaRoutes);
+
+// Health Check
+app.get('/health', (req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Global Error Handler
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    Logger.error(err.stack || err.message);
+    res.status(500).json({ error: 'Something went wrong!' });
+});
+
+export default app;

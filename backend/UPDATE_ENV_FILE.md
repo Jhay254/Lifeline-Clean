@@ -1,8 +1,51 @@
+## ⚠️ IMPORTANT: Update Your .env File
+
+Please update your `.env` file with the following changes:
+
+### 1. Update DATABASE_URL
+
+**Replace this line:**
+```env
+DATABASE_URL=postgresql://lifeline:lifeline_dev_password@localhost:5432/lifeline_db
+```
+JWT_SECRET=rhixsnIuX9HlpY0WqOCLyEJbt82PDMvA
+FRONTEND_URL=http://localhost:3000
+
+**With this:**
+```env
+DATABASE_URL="postgresql://lifeline:lifeline_dev_password@localhost:5432/lifeline_db"
+```
+
+### 2. Add JWT_SECRET (if not already present)
+
+Add this line:
+```env
+JWT_SECRET=your_secure_random_string_change_this_in_production
+```
+
+**Generate a secure JWT secret:**
+You can use this PowerShell command to generate a random secret:
+```powershell
+-join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | ForEach-Object {[char]$_})
+```
+
+### 3. Add FRONTEND_URL (if not already present)
+
+Add this line:
+```env
+FRONTEND_URL=http://localhost:3000
+```
+
+### Complete .env Example
+
+Your `.env` file should look like this:
+
+```env
 # Database (PostgreSQL)
 DATABASE_URL="postgresql://lifeline:lifeline_dev_password@localhost:5432/lifeline_db"
 
-# JWT Secret (Change this in production!)
-JWT_SECRET=your_jwt_secret_key_change_in_production
+# JWT Secret
+JWT_SECRET=your_secure_random_string_here
 
 # Frontend URL (for CORS)
 FRONTEND_URL=http://localhost:3000
@@ -40,3 +83,6 @@ OUTLOOK_REDIRECT_URI=http://localhost:3000/auth/outlook/callback
 # Server
 PORT=3000
 NODE_ENV=development
+```
+
+### ✅ After updating .env, tell me and I'll continue with the migration!

@@ -1,324 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-enum EventCategory {
-  LIFE_EVENT
-  WORK
-  PERSONAL
-  OTHER
-}
-
-enum Role {
-  USER
-  ADMIN
-  DEVELOPER
-}
-
 model User {
-  id              String          @id @default(uuid())
-  email           String          @unique
-  name            String?
-  displayName     String?
-  firstName       String?
-  lastName        String?
-  role            Role            @default(USER)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Relations
-  events                  Event[]
-  tagsCreated             EventTag[]      @relation("TagsCreated")
-  tagsReceived            EventTag[]      @relation("TagsReceived")
-  posts                   Post[]
-  diaryEntries            DiaryEntry[]
-  biographyEvents         BiographyEvent[]
-  developerProfile        DeveloperProfile?
-  apiKeys                 APIKey[]
-  organizations           OrganizationMembership[]
-  interrogationSessions   InterrogationSession[]
-  audioDiaryEntries       AudioDiaryEntry[]
-  deepfakeAnalyses        DeepfakeAnalysis[]
-  trustBadges             TrustBadge[]
-  legacyPlan              LegacyPlan?
-  celebrityProfile        CelebrityProfile?
-  referralCode            ReferralCode?
-  referralsReferred       Referral[]      @relation("Referrer")
-  referralsReferredBy     Referral[]      @relation("ReferredUser")
-  referralRewards         ReferralReward[]
-  mergerSuggestions       MergerSuggestion[]
-  deadMansSwitch          DeadMansSwitch?
-  deathVerifications      DeathVerification[]
-  posthumousContent       PosthumousContent[]
-  finalChapters           FinalChapter[]
+  password  String?
   
-  @@map("users")
+  socialAccounts SocialAccount[]
+  contents       Content[]
+  emailMetadata  EmailMetadata[]
+  media          Media[]
+  refreshTokens  RefreshToken[]
+
+  @@index([createdAt])
+  @@index([email, createdAt])
 }
 
-model Event {
-  id              String          @id @default(uuid())
-  userId          String
-  user            User            @relation(fields: [userId], references: [id])
-  title           String
-  description     String?         @db.Text
-  date            DateTime
-  category        EventCategory   @default(LIFE_EVENT)
-  tags            EventTag[]
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
   @@index([userId])
-  @@index([date])
-  @@map("events")
+  @@index([expiresAt])
+  @@index([revoked])
 }
 
-model EventTag {
-  id              String          @id @default(uuid())
-  eventId         String
-  event           Event           @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  creatorId       String
-  creator         User            @relation("TagsCreated", fields: [creatorId], references: [id])
-  receiverId      String
-  receiver        User            @relation("TagsReceived", fields: [receiverId], references: [id])
-  tagType         String          // PERSON, LOCATION, ACTIVITY
-  value           String
-  isVerified      Boolean         @default(false)
-  verifiedAt      DateTime?
-  createdAt       DateTime        @default(now())
-  @@index([eventId])
-  @@index([creatorId])
-  @@index([receiverId])
-  @@map("event_tags")
+model SocialAccount {
+  id           String    @id @default(uuid())
+  userId       String
+  provider     String    // "INSTAGRAM", "TWITTER", "FACEBOOK", "LINKEDIN"
+  providerId   String
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@index([provider])
+  @@index([providerId])
+  @@index([expiresAt])
 }
 
-model Post {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Content {
+  id              String   @id @default(uuid())
+  userId          String
+  provider        String   // "INSTAGRAM", "TWITTER", "FACEBOOK", "LINKEDIN"
+  platformId      String
+  contentType     String
+  text            String?
+  mediaUrls       String?
+  timestamp       DateTime
+  engagementLikes Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, platformId])
+  @@index([userId])
+  @@index([timestamp])
 }
 
-model DiaryEntry {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model EmailMetadata {
+  id              String   @id @default(uuid())
+  userId          String
+  provider        String   // "GMAIL", "OUTLOOK"
+  emailId         String   // Unique email ID from provider
+  subject         String?
+  sender          String
+  recipient       String
+  timestamp       DateTime
+  hasAttachments  Boolean  @default(false)
+  category        String?  // "flight", "hotel", "receipt", "personal", etc.
+  extractedData   String?  // JSON string of extracted metadata
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, emailId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([category])
 }
 
-model BiographyEvent {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  title     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+model Media {
+  id              String   @id @default(uuid())
+  userId          String
+  contentId       String?  // Link to Content model if from social media
+  provider        String   // "INSTAGRAM", "TWITTER", "FACEBOOK", etc.
+  originalUrl     String
+  localPath       String?  // Path to downloaded file
+  fileHash        String   @unique // SHA-256 hash for deduplication
+  fileSize        Int      // Size in bytes
+  mimeType        String   // image/jpeg, video/mp4, etc.
+  width           Int?
+  height          Int?
+  duration        Int?     // For videos, in seconds
+  
+  // EXIF Metadata
+  latitude        Float?
+  longitude       Float?
+  takenAt         DateTime?
+  cameraModel     String?
+  
+  // Processing
+  isProcessed     Boolean  @default(false)
+  isOptimized     Boolean  @default(false)
+  optimizedPath   String?
+  version         Int      @default(1)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-model DeveloperProfile {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  bio       String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model APIKey {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  key       String   @unique
-  createdAt DateTime @default(now())
-}
-
-model HistoricalArchive {
-  id        String   @id @default(uuid())
-  title     String
-  content   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  importBatchId String?
-  importBatch ArchiveImportBatch? @relation(fields: [importBatchId], references: [id])
-}
-
-model ArchiveImportBatch {
-  id        String   @id @default(uuid())
-  status    String
-  archives  HistoricalArchive[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  members   OrganizationMembership[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model OrganizationMembership {
-  id             String       @id @default(uuid())
-  userId         String
-  user           User         @relation(fields: [userId], references: [id])
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  role           String
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-}
-
-model InterrogationSession {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  status    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model AudioDiaryEntry {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  url       String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model DeepfakeAnalysis {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  result    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model TrustBadge {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  type      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model LegacyPlan {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  content   String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CelebrityProfile {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  bio       String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ReferralCode {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  code      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Referral {
-  id             String   @id @default(uuid())
-  referrerId     String
-  referrer       User     @relation("Referrer", fields: [referrerId], references: [id])
-  referredUserId String
-  referredUser   User     @relation("ReferredUser", fields: [referredUserId], references: [id])
-  status         String
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
-model ReferralReward {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  amount    Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ReferralMilestone {
-  id        String   @id @default(uuid())
-  name      String
-  threshold Int
-  reward    Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model MergerSuggestion {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model ContentWatermark {
-  id        String   @id @default(uuid())
-  contentId String
-  watermark String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model DeadMansSwitch {
-  id           String   @id @default(uuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  status       String
-  verifierName String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model DeathVerification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  status    String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model PosthumousContent {
-  id          String   @id @default(uuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  contentType String?
-  content     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model FinalChapter {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  content   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([userId])
+  @@index([fileHash])
+  @@index([provider])
+  @@index([takenAt])
+  @@index([userId, createdAt])
 }

@@ -1,0 +1,20 @@
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-11-30 01:30:03:303"}
+{"level":"info","message":"Initializing cron jobs...","timestamp":"2025-11-30 01:30:03:303"}
+{"level":"info","message":"Cron jobs initialized successfully","timestamp":"2025-11-30 01:30:03:303"}
+{"level":"info","message":"Redis connected for PKCE storage","timestamp":"2025-11-30 01:30:03:303"}
+{"level":"http","message":"POST /auth/register","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"http","message":"POST /register 201 260ms","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"http","message":"POST /auth/login","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"http","message":"POST /login 200 93ms","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"http","message":"GET /auth/me","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"error","message":"GET /me 401 2ms","timestamp":"2025-11-30 01:32:02:322"}
+{"level":"http","message":"POST /auth/register","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"http","message":"POST /register 201 459ms","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"http","message":"POST /auth/login","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"http","message":"POST /login 200 121ms","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"http","message":"GET /auth/me","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"error","message":"GET /me 429 5ms","timestamp":"2025-11-30 01:36:36:3636"}
+{"level":"info","message":"Server is running on port 3000","timestamp":"2025-11-30 01:44:13:4413"}
+{"level":"info","message":"Initializing cron jobs...","timestamp":"2025-11-30 01:44:13:4413"}
+{"level":"info","message":"Cron jobs initialized successfully","timestamp":"2025-11-30 01:44:13:4413"}
+{"level":"info","message":"Redis connected for PKCE storage","timestamp":"2025-11-30 01:44:13:4413"}
