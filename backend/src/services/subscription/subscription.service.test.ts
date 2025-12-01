@@ -1,6 +1,6 @@
-import { SubscriptionService } from '../services/subscription/subscription.service';
+import { SubscriptionService } from './subscription.service';
 import { PrismaClient } from '@prisma/client';
-import { paymentService } from '../services/payment/payment.service';
+import { paymentService } from '../payment/payment.service';
 
 // Mock dependencies
 jest.mock('@prisma/client');
