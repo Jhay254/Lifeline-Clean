@@ -10,7 +10,8 @@ import {
     CreditCard,
     User,
     Settings,
-    LogOut
+    LogOut,
+    TrendingUp
 } from 'lucide-react';
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
@@ -42,6 +43,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: CreditCard,
             href: '/monetization',
             active: pathname === '/monetization',
+        },
+        {
+            label: 'Revenue',
+            icon: TrendingUp,
+            href: '/revenue',
+            active: pathname === '/revenue',
         },
         {
             label: 'Profile',
