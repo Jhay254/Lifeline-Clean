@@ -1,6 +1,6 @@
 import vision from '@google-cloud/vision';
-import { cacheService, CacheKeys } from '../config/redis';
-import { logAIOperation, logAIError } from '../utils/logger';
+import { cacheService, CacheKeys } from '../../config/redis';
+import { logAIOperation, logAIError } from '../../utils/logger';
 import path from 'path';
 import fs from 'fs';
 
@@ -65,7 +65,7 @@ export const analyzeLabels = async (
 
         const formattedLabels = labels
             .slice(0, maxResults)
-            .map((label) => ({
+            .map((label: any) => ({
                 description: label.description || '',
                 score: label.score || 0,
             }));
@@ -122,7 +122,7 @@ export const detectFaces = async (
         const [result] = await client.faceDetection(imagePath);
         const faces = result.faceAnnotations || [];
 
-        const formattedFaces = faces.map((face) => {
+        const formattedFaces = faces.map((face: any) => {
             const vertices = face.boundingPoly?.vertices || [];
             const boundingBox = {
                 x: vertices[0]?.x || 0,
@@ -188,7 +188,7 @@ export const detectLandmarks = async (
         const [result] = await client.landmarkDetection(imagePath);
         const landmarks = result.landmarkAnnotations || [];
 
-        const formattedLandmarks = landmarks.slice(0, maxResults).map((landmark) => ({
+        const formattedLandmarks = landmarks.slice(0, maxResults).map((landmark: any) => ({
             name: landmark.description || '',
             score: landmark.score || 0,
             location: landmark.locations?.[0]?.latLng
