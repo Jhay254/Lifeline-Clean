@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { taggingService } from '../services/network/tagging.service';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -9,9 +9,9 @@ const router = Router();
  * POST /api/tags
  * Tag a user in an event
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticate, async (req: AuthRequest, res) => {
     try {
-        const taggerId = req.user!.userId;
+        const taggerId = req.user!.id;
         const { taggedUserEmail, eventId, eventTitle, eventDate, message } = req.body;
 
         if (!taggedUserEmail || !eventId || !eventTitle || !eventDate) {
@@ -38,9 +38,9 @@ router.post('/', authenticateToken, async (req, res) => {
  * GET /api/tags/pending
  * Get pending tags for current user
  */
-router.get('/pending', authenticateToken, async (req, res) => {
+router.get('/pending', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const tags = await taggingService.getPendingTags(userId);
         res.json(tags);
     } catch (error) {
@@ -53,9 +53,9 @@ router.get('/pending', authenticateToken, async (req, res) => {
  * GET /api/tags/my-tags
  * Get all tags for current user (made and received)
  */
-router.get('/my-tags', authenticateToken, async (req, res) => {
+router.get('/my-tags', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const tags = await taggingService.getUserTags(userId);
         res.json(tags);
     } catch (error) {
@@ -68,9 +68,9 @@ router.get('/my-tags', authenticateToken, async (req, res) => {
  * POST /api/tags/:tagId/verify
  * Verify/accept a tag
  */
-router.post('/:tagId/verify', authenticateToken, async (req, res) => {
+router.post('/:tagId/verify', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const { tagId } = req.params;
         const { perspective, photos, details } = req.body;
 
@@ -99,9 +99,9 @@ router.post('/:tagId/verify', authenticateToken, async (req, res) => {
  * POST /api/tags/:tagId/decline
  * Decline a tag
  */
-router.post('/:tagId/decline', authenticateToken, async (req, res) => {
+router.post('/:tagId/decline', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const { tagId } = req.params;
 
         const tag = await taggingService.declineTag(tagId, userId);

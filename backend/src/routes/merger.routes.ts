@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { storyMergerService } from '../services/network/story-merger.service';
-import { authenticateToken } from '../middleware/auth.middleware';
+import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import logger from '../utils/logger';
 
 const router = Router();
@@ -9,9 +9,9 @@ const router = Router();
  * POST /api/mergers
  * Create merger proposal
  */
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const { collisionId } = req.body;
 
         if (!collisionId) {
@@ -38,9 +38,9 @@ router.post('/', authenticateToken, async (req, res) => {
  * POST /api/mergers/:id/approve
  * Approve merger and add perspective
  */
-router.post('/:id/approve', authenticateToken, async (req, res) => {
+router.post('/:id/approve', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const { id } = req.params;
         const { narrative, photos, mood } = req.body;
 
@@ -69,7 +69,7 @@ router.post('/:id/approve', authenticateToken, async (req, res) => {
  * POST /api/mergers/:id/publish
  * Publish merger
  */
-router.post('/:id/publish', authenticateToken, async (req, res) => {
+router.post('/:id/publish', authenticate, async (req: AuthRequest, res) => {
     try {
         const { id } = req.params;
         const { price } = req.body;
@@ -88,9 +88,9 @@ router.post('/:id/publish', authenticateToken, async (req, res) => {
  * GET /api/mergers/my-mergers
  * Get user's mergers
  */
-router.get('/my-mergers', authenticateToken, async (req, res) => {
+router.get('/my-mergers', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const mergers = await storyMergerService.getUserMergers(userId);
         res.json(mergers);
     } catch (error) {
@@ -103,9 +103,9 @@ router.get('/my-mergers', authenticateToken, async (req, res) => {
  * GET /api/mergers/pending
  * Get pending merger proposals for user
  */
-router.get('/pending', authenticateToken, async (req, res) => {
+router.get('/pending', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const mergers = await storyMergerService.getPendingMergers(userId);
         res.json(mergers);
     } catch (error) {
@@ -133,7 +133,7 @@ router.get('/marketplace', async (req, res) => {
  * GET /api/mergers/:id
  * Get merger by ID
  */
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticate, async (req: AuthRequest, res) => {
     try {
         const { id } = req.params;
         const merger = await storyMergerService.getMergerById(id);
@@ -150,9 +150,9 @@ router.get('/:id', authenticateToken, async (req, res) => {
  * POST /api/mergers/:id/purchase
  * Purchase merger access
  */
-router.post('/:id/purchase', authenticateToken, async (req, res) => {
+router.post('/:id/purchase', authenticate, async (req: AuthRequest, res) => {
     try {
-        const userId = req.user!.userId;
+        const userId = req.user!.id;
         const { id } = req.params;
 
         const result = await storyMergerService.purchaseMerger(id, userId);
