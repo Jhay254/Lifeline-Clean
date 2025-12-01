@@ -11,7 +11,8 @@ import {
     User,
     Settings,
     LogOut,
-    TrendingUp
+    TrendingUp,
+    Network
 } from 'lucide-react';
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> { }
@@ -37,6 +38,12 @@ export function Sidebar({ className }: SidebarProps) {
             icon: Database,
             href: '/data-sources',
             active: pathname === '/data-sources',
+        },
+        {
+            label: 'Memory Graph',
+            icon: Network,
+            href: '/memory-graph',
+            active: pathname === '/memory-graph',
         },
         {
             label: 'Monetization',
