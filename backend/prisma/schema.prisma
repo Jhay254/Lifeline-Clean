@@ -21,6 +21,12 @@ model User {
   emailMetadata  EmailMetadata[]
   media          Media[]
   refreshTokens  RefreshToken[]
+  
+  // Monetization relations
+  createdTiers        SubscriptionTier[] @relation("CreatorTiers")
+  subscriptions       Subscription[]     @relation("UserSubscriptions")
+  creatorSubscriptions Subscription[]    @relation("CreatorSubscriptions")
+  payouts             Payout[]
 
   @@index([createdAt])
   @@index([email, createdAt])
@@ -139,4 +145,135 @@ model Media {
   @@index([provider])
   @@index([takenAt])
   @@index([userId, createdAt])
+}
+
+// ============================================
+// MONETIZATION MODELS
+// ============================================
+
+model SubscriptionTier {
+  id          String   @id @default(uuid())
+  creatorId   String
+  creator     User     @relation("CreatorTiers", fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  name        String   // "Free", "Bronze", "Gold"
+  price       Float    // Monthly price in USD
+  currency    String   @default("USD")
+  
+  features    String   // JSON string of feature descriptions
+  isActive    Boolean  @default(true)
+  
+  subscriptions Subscription[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([creatorId])
+  @@index([isActive])
+}
+
+model Subscription {
+  id              String   @id @default(uuid())
+  subscriberId    String
+  subscriber      User     @relation("UserSubscriptions", fields: [subscriberId], references: [id], onDelete: Cascade)
+  creatorId       String
+  creator         User     @relation("CreatorSubscriptions", fields: [creatorId], references: [id], onDelete: Cascade)
+  tierId          String
+  tier            SubscriptionTier @relation(fields: [tierId], references: [id])
+  
+  status          String   // "active", "canceled", "past_due", "paused"
+  
+  // Payment provider details
+  provider        String   // "paypal" or "stripe"
+  providerSubId   String   // External subscription ID
+  
+  // Billing
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean @default(false)
+  
+  // Metadata
+  metadata        String?  // JSON string
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  payments        Payment[]
+  
+  @@unique([subscriberId, creatorId])
+  @@index([creatorId])
+  @@index([status])
+  @@index([tierId])
+}
+
+model Payment {
+  id              String   @id @default(uuid())
+  subscriptionId  String
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  
+  amount          Float
+  currency        String   @default("USD")
+  
+  provider        String   // "paypal" or "stripe"
+  providerPaymentId String @unique
+  
+  status          String   // "succeeded", "failed", "pending", "refunded"
+  
+  // Revenue split (40% creator / 60% platform)
+  creatorAmount   Float    // 40%
+  platformFee     Float    // 60%
+  
+  // Payout tracking
+  payoutId        String?
+  payout          Payout?  @relation(fields: [payoutId], references: [id])
+  
+  metadata        String?  // JSON string
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([payoutId])
+}
+
+model Payout {
+  id          String   @id @default(uuid())
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  amount      Float
+  currency    String   @default("USD")
+  
+  status      String   // "pending", "processing", "paid", "failed"
+  
+  // Bank details (encrypted)
+  bankAccountLast4 String?
+  
+  // Provider details
+  provider    String   // "paypal" or "stripe_connect"
+  providerPayoutId String?
+  
+  payments    Payment[]
+  
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+  
+  @@index([creatorId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ContentAccess {
+  id          String   @id @default(uuid())
+  chapterId   String   @unique // Reference to biography chapter
+  creatorId   String
+  
+  accessLevel String   // "public", "private", "bronze", "gold"
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([creatorId])
+  @@index([accessLevel])
 }
