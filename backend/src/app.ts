@@ -11,6 +11,7 @@ import oauthRoutes from './routes/oauth.routes';
 import mediaRoutes from './routes/media.routes';
 import networkRoutes from './routes/network.routes';
 import taggingRoutes from './routes/tagging.routes';
+import mergerRoutes from './routes/merger.routes';
 import Logger from './utils/logger';
 
 const app = express();
@@ -57,6 +58,7 @@ app.use('/auth', oauthLimiter, oauthRoutes);
 app.use('/media', mediaLimiter, mediaRoutes);
 app.use('/api/network', networkRoutes); // Phase 2.1: Network Effects
 app.use('/api/tags', taggingRoutes); // Phase 2.1: Tagging System
+app.use('/api/mergers', mergerRoutes); // Phase 2.1: Story Mergers
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {
